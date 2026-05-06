@@ -52,6 +52,24 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .nav-btn svg { width: 22px; height: 22px; }
 .nav-btn span { font-size: 10px; font-weight: 500; letter-spacing: 0.3px; }
 
+/* Scanner */
+.scan-btn { width:100%; background:var(--surface); border:1.5px dashed var(--border2); border-radius:var(--radius); padding:16px; color:var(--accent2); font-family:var(--font-body); font-size:14px; font-weight:500; cursor:pointer; margin-bottom:10px; display:flex; align-items:center; justify-content:center; gap:8px; transition:all 0.2s; }
+.scan-btn:active { background:var(--surface2); }
+.scan-preview { width:100%; border-radius:var(--radius-sm); margin-bottom:10px; max-height:200px; object-fit:cover; }
+.scan-result { background:var(--surface); border:1px solid var(--border2); border-radius:var(--radius); padding:14px; margin-bottom:10px; }
+.scan-result-title { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; }
+.scan-item { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:0.5px solid var(--border); }
+.scan-item:last-child { border-bottom:none; }
+.scan-item input { background:var(--bg); border:1px solid var(--border2); border-radius:8px; padding:6px 8px; color:var(--text); font-family:var(--font-body); font-size:13px; outline:none; }
+.scan-item input.name-in { flex:1; }
+.scan-item input.amt-in { width:80px; }
+.scan-item select { background:var(--bg); border:1px solid var(--border2); border-radius:8px; padding:6px 8px; color:var(--text); font-family:var(--font-body); font-size:12px; outline:none; -webkit-appearance:none; }
+.scan-item-del { background:none; border:none; cursor:pointer; color:var(--muted); font-size:15px; padding:2px 6px; }
+.scan-item-del:active { color:var(--red); }
+.analyzing { text-align:center; padding:20px; color:var(--muted); font-size:13px; }
+.api-key-note { font-size:11px; color:var(--muted); text-align:center; margin-top:6px; }
+.api-key-note a { color:var(--accent2); cursor:pointer; }
+
 /* Setup screen */
 .setup-screen { padding: 24px 0; }
 .setup-card { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; }
@@ -181,6 +199,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <script>
 // ── Config (user fills these in) ──
 const CONFIG_KEY = 'jb-supabase-config';
+const ANTHROPIC_KEY = 'jb-anthropic-key';
 const FIXED_KEY = 'jb-fixed-bills';
 let sbClient = null;
 let currentPage = 'overview';
@@ -585,6 +604,137 @@ function saveFixedEdit(id, type) {
   render();
 }
 
+function triggerScan() {
+  const key = localStorage.getItem(ANTHROPIC_KEY);
+  if(!key) {
+    const k = prompt('Enter your Anthropic API key (sk-ant-...):\n\nGet one free at console.anthropic.com — your key is stored only on this device.');
+    if(k && k.startsWith('sk-ant')) {
+      localStorage.setItem(ANTHROPIC_KEY, k);
+      toast('API key saved ✓');
+    } else if(k) {
+      toast('Invalid key — should start with sk-ant-', true);
+      return;
+    } else return;
+  }
+  document.getElementById('scan-input').click();
+}
+
+async function handleScan(event) {
+  const file = event.target.files[0];
+  if(!file) return;
+  const out = document.getElementById('scan-output');
+  out.innerHTML = '<div class="analyzing"><div class="spinner" style="margin:0 auto 8px;"></div>Analyzing receipt…</div>';
+
+  // Convert image to base64
+  const base64 = await new Promise(res => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.readAsDataURL(file);
+  });
+
+  const imgUrl = URL.createObjectURL(file);
+  const key = localStorage.getItem(ANTHROPIC_KEY);
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-6',
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: file.type, data: base64 }},
+            { type: 'text', text: 'Look at this receipt or financial screenshot. Extract each line item or transaction. Return ONLY a JSON array like: [{"name":"Item name","amount":12.34,"category":"groceries"}]. Categories must be one of: groceries, food, shared, jacob, b. Use "groceries" for grocery stores, "food" for restaurants, "shared" for general shared purchases, "jacob" for personal male items, "b" for personal female items. If it is a single total (like a credit card screenshot), return one item with the merchant name and total. No explanation, just the JSON array.' }
+          ]
+        }]
+      })
+    });
+
+    const data = await resp.json();
+    if(data.error) { toast('API error: ' + data.error.message, true); out.innerHTML=''; return; }
+
+    let items = [];
+    try {
+      const text = data.content[0].text.trim();
+      const clean = text.replace(/```json|```/g,'').trim();
+      items = JSON.parse(clean);
+    } catch(e) { toast('Could not read receipt — try a clearer photo', true); out.innerHTML=''; return; }
+
+    if(!items.length) { toast('No items found on receipt', true); out.innerHTML=''; return; }
+
+    // Get current paid-by selection
+    const paidBy = document.getElementById('exp-paid') ? document.getElementById('exp-paid').value : 'jacob';
+
+    out.innerHTML = `
+      <img src="${imgUrl}" class="scan-preview"/>
+      <div class="scan-result">
+        <div class="scan-result-title">Found ${items.length} item${items.length>1?'s':''} — edit if needed</div>
+        ${items.map((item,i) => `
+          <div class="scan-item" id="scan-item-${i}">
+            <input class="name-in" id="sname-${i}" value="${item.name}" placeholder="Item name"/>
+            <input class="amt-in" id="samt-${i}" type="number" value="${item.amount.toFixed(2)}" inputmode="decimal"/>
+            <select id="scat-${i}">
+              <option value="groceries" ${item.category==='groceries'?'selected':''}>Groceries</option>
+              <option value="food" ${item.category==='food'?'selected':''}>Eating out</option>
+              <option value="shared" ${item.category==='shared'?'selected':''}>Shared</option>
+              <option value="jacob" ${item.category==='jacob'?'selected':''}>Jacob</option>
+              <option value="b" ${item.category==='b'?'selected':''}>B</option>
+            </select>
+            <button class="scan-item-del" onclick="removeScanItem(${i})">✕</button>
+          </div>`).join('')}
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <select id="scan-paid" style="flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;-webkit-appearance:none;">
+            <option value="jacob">Jacob paid</option>
+            <option value="b">B paid</option>
+          </select>
+          <button class="add-btn" style="flex:1;margin:0;" onclick="addScanItems(${items.length})">Add All</button>
+        </div>
+      </div>`;
+
+    event.target.value = '';
+  } catch(e) {
+    toast('Error connecting to AI — check your API key', true);
+    out.innerHTML = '';
+  }
+}
+
+function removeScanItem(i) {
+  const el = document.getElementById('scan-item-'+i);
+  if(el) el.remove();
+}
+
+async function addScanItems(count) {
+  const paid = document.getElementById('scan-paid').value;
+  let added = 0;
+  const promises = [];
+  for(let i=0; i<count; i++) {
+    const nameEl = document.getElementById('sname-'+i);
+    const amtEl = document.getElementById('samt-'+i);
+    const catEl = document.getElementById('scat-'+i);
+    if(!nameEl) continue; // removed by user
+    const name = nameEl.value.trim();
+    const amount = parseFloat(amtEl.value);
+    const type = catEl.value;
+    if(!name || isNaN(amount) || amount<=0) continue;
+    promises.push(sbClient.from('expenses').insert({name, amount, paid, type}));
+    added++;
+  }
+  await Promise.all(promises);
+  if(added>0) {
+    toast(added + ' expense' + (added>1?'s':'')+' added ✓');
+    document.getElementById('scan-output').innerHTML = '';
+  } else {
+    toast('No valid items to add', true);
+  }
+}
+
 function prevMonth() {
   const [y,m] = viewMonth.split('-').map(Number);
   const d = new Date(y, m-2, 1);
@@ -609,7 +759,21 @@ function renderExpenses(c) {
   const filtered = data.expenses.filter(e => (e.created_at||'').slice(0,7) === viewMonth).reverse();
   const total = filtered.reduce((s,e)=>s+e.amount,0);
   return `
-    ${isCurrentMonth ? `<div class="add-form">
+    ${isCurrentMonth ? `
+    <div id="scanner-section">
+      <button class="scan-btn" onclick="triggerScan()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="4"/><path d="M12 8v-2M12 18v-2M8 12H6M18 12h-2"/></svg>
+        📷 Scan Receipt or Screenshot
+      </button>
+      <input type="file" id="scan-input" accept="image/*" style="display:none" onchange="handleScan(event)"/>
+      <div id="scan-output"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <hr style="flex:1;border:none;border-top:0.5px solid var(--border2);"/>
+      <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">or enter manually</span>
+      <hr style="flex:1;border:none;border-top:0.5px solid var(--border2);"/>
+    </div>
+    <div class="add-form">
       <div class="form-title">Add an expense</div>
       <div class="form-field2"><label>What was it?</label><input id="exp-name" placeholder="e.g. Harmons, Gas, Costco…"/></div>
       <div class="form-row2">
