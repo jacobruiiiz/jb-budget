@@ -168,7 +168,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     </button>
     <button class="nav-btn" id="nav-b" onclick="showPage('b')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-      <span>B</span>
+      <span>Bambi</span>
     </button>
     <button class="nav-btn" id="nav-budget" onclick="showPage('budget')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 8h.01M12 8h5M7 12h3M14 12h3"/></svg>
@@ -186,6 +186,7 @@ let sbClient = null;
 let currentPage = 'overview';
 let data = { bills: [], expenses: [], incomes: [], payments: [] };
 let editingFixedId = null;
+let editingIncId = null;
 
 const DEFAULT_HOME_FIXED = [
   {id:'f1', name:'Mortgage',           amount:2184.00},
@@ -388,21 +389,26 @@ function calc() {
   getFixed().forEach(b => { jBillsOwed+=b.amount*0.6; bBillsOwed+=b.amount*0.4; });
   // Jacob's personal fixed bills
   getJacobFixed().forEach(b => { jBillsOwed+=b.amount; });
-  // B's personal fixed bills
+  // Bambi's personal fixed bills
   getBFixed().forEach(b => { bBillsOwed+=b.amount; });
   data.bills.forEach(b => {
     if(b.type==='jacob') jBillsOwed+=+b.amount;
     else { jBillsOwed+=b.amount*0.6; bBillsOwed+=b.amount*0.4; }
   });
+  const now = new Date();
+  const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const thisMonthExp = data.expenses.filter(e => (e.created_at||'').slice(0,7) === thisMonth);
+  const thisMonthPay = data.payments.filter(p => (p.paid_at||'').slice(0,7) === thisMonth);
+
   let jExpOwed=0, bExpOwed=0;
-  data.expenses.forEach(e => {
+  thisMonthExp.forEach(e => {
     const s=['groceries','food','shared'].includes(e.type);
     if(s){jExpOwed+=e.amount*0.6;bExpOwed+=e.amount*0.4;}
     else if(e.type==='jacob') jExpOwed+=+e.amount;
     else bExpOwed+=+e.amount;
   });
   let balance=0;
-  data.expenses.forEach(e => {
+  thisMonthExp.forEach(e => {
     if(!['groceries','food','shared'].includes(e.type)) return;
     balance += e.paid==='jacob' ? e.amount*0.4 : -e.amount*0.6;
   });
@@ -410,8 +416,8 @@ function calc() {
   data.bills.forEach(b => { if(b.type==='shared') balance+=b.amount*0.4; });
   // Payments reduce the balance
   data.payments.forEach(p => {
-    if(p.from_who==='b' && p.to_who==='jacob') balance -= p.amount; // B paid Jacob → reduces what B owes
-    if(p.from_who==='jacob' && p.to_who==='b') balance += p.amount; // Jacob paid B → reduces what Jacob owes
+    if(p.from_who==='b' && p.to_who==='jacob') balance -= p.amount; // Bambi paid Jacob → reduces what B owes
+    if(p.from_who==='jacob' && p.to_who==='b') balance += p.amount; // Jacob paid Bambi → reduces what Jacob owes
   });
   return {jIncome,bIncome,jOut:jBillsOwed+jExpOwed,bOut:bBillsOwed+bExpOwed,balance};
 }
@@ -425,23 +431,23 @@ function render() {
 }
 
 function expLabel(t) {
-  return{groceries:'Groceries',food:'Eating out',shared:'Other shared',jacob:'Jacob personal',b:'B personal'}[t]||t;
+  return{groceries:'Groceries',food:'Eating out',shared:'Other shared',jacob:'Jacob personal',b:'Bambi personal'}[t]||t;
 }
 
 function renderOverview(c) {
   const jNet=c.jIncome-c.jOut, bNet=c.bIncome-c.bOut;
   let sColor='color:var(--text)', sTxt='All even! 🎉', sWho="You're all squared up";
   if(Math.abs(c.balance)>=0.01) {
-    if(c.balance>0){sColor='color:var(--green)';sTxt=fmt(c.balance);sWho='B owes Jacob';}
-    else{sColor='color:var(--red)';sTxt=fmt(c.balance);sWho='Jacob owes B';}
+    if(c.balance>0){sColor='color:var(--green)';sTxt=fmt(c.balance);sWho='Bambi owes Jacob';}
+    else{sColor='color:var(--red)';sTxt=fmt(c.balance);sWho='Jacob owes Bambi';}
   }
   const recent=data.expenses.slice(-5).reverse();
   return `
     <div class="metrics-grid">
       <div class="metric-card"><div class="metric-label">Jacob income</div><div class="metric-value green">${fmt(c.jIncome)}</div></div>
-      <div class="metric-card"><div class="metric-label">B income</div><div class="metric-value pink">${fmt(c.bIncome)}</div></div>
+      <div class="metric-card"><div class="metric-label">Bambi income</div><div class="metric-value pink">${fmt(c.bIncome)}</div></div>
       <div class="metric-card"><div class="metric-label">Jacob net</div><div class="metric-value ${jNet>=0?'green':'red'}">${fmtSigned(jNet)}</div></div>
-      <div class="metric-card"><div class="metric-label">B net</div><div class="metric-value ${bNet>=0?'green':'red'}">${fmtSigned(bNet)}</div></div>
+      <div class="metric-card"><div class="metric-label">Bambi net</div><div class="metric-value ${bNet>=0?'green':'red'}">${fmtSigned(bNet)}</div></div>
     </div>
     <div class="settle-box">
       <div class="settle-label">Settlement</div>
@@ -452,10 +458,10 @@ function renderOverview(c) {
     <div class="add-form" style="margin-bottom:14px;">
       <div class="form-row2">
         <div class="form-field2"><label>From</label>
-          <select id="pay-from"><option value="jacob">Jacob</option><option value="b">B</option></select>
+          <select id="pay-from"><option value="jacob">Jacob</option><option value="b">Bambi</option></select>
         </div>
         <div class="form-field2"><label>To</label>
-          <select id="pay-to"><option value="b">B</option><option value="jacob">Jacob</option></select>
+          <select id="pay-to"><option value="b">Bambi</option><option value="jacob">Jacob</option></select>
         </div>
       </div>
       <div class="form-row2">
@@ -481,17 +487,16 @@ function renderOverview(c) {
       <button class="add-btn" onclick="addPayment()">Log Payment</button>
     </div>
 
-    <div class="section-label">Payment history</div>
+    <div class="section-label">Payment history · all time</div>
     <div class="item-list">
-      ${data.payments.length?data.payments.slice(0,10).map(p=>`
+      ${data.payments.length?data.payments.map(p=>`
         <div class="item">
           <div class="item-dot shared"></div>
           <div class="item-left">
-            <div class="item-name">${p.from_who==='jacob'?'Jacob':'B'} → ${p.to_who==='jacob'?'Jacob':'B'} · ${p.method}</div>
+            <div class="item-name">${p.from_who==='jacob'?'Jacob':'Bambi'} → ${p.to_who==='jacob'?'Jacob':'Bambi'} · ${p.method}</div>
             <div class="item-meta">${p.paid_at}${p.note?' · '+p.note:''}</div>
           </div>
           <div class="item-amount income">${fmt(p.amount)}</div>
-          <button class="item-del" onclick="delPayment('${p.id}')">✕</button>
         </div>`).join(''):'<div class="empty-state"><div class="emoji">💸</div>No payments logged yet</div>'}
     </div>
 
@@ -500,7 +505,7 @@ function renderOverview(c) {
       ${recent.length?recent.map(e=>`
         <div class="item">
           <div class="item-dot ${['groceries','food','shared'].includes(e.type)?'shared':e.type}"></div>
-          <div class="item-left"><div class="item-name">${e.name}</div><div class="item-meta">${expLabel(e.type)} · ${e.paid==='jacob'?'Jacob':'B'} paid</div></div>
+          <div class="item-left"><div class="item-name">${e.name}</div><div class="item-meta">${expLabel(e.type)} · ${e.paid==='jacob'?'Jacob':'Bambi'} paid</div></div>
           <div class="item-amount">${fmt(e.amount)}</div>
         </div>`).join(''):'<div class="empty-state"><div class="emoji">🧾</div>No expenses yet</div>'}
     </div>`;
@@ -540,7 +545,7 @@ function renderBills(c) {
       </div>
       <button class="add-btn" onclick="addBill()">Add Bill</button>
     </div>
-    <div class="info-note">Shared bills: Jacob 60% · B 40%</div>
+    <div class="info-note">These are recurring monthly bills — they stay until you delete them. Shared bills: Jacob 60% · Bambi 40%</div>
     <div class="section-label">Jacob's bills</div>
     <div class="item-list">
       ${jB.length?jB.map(b=>`<div class="item"><div class="item-dot jacob"></div><div class="item-left"><div class="item-name">${b.name}</div><div class="item-meta">Jacob only · monthly</div></div><div class="item-amount">${fmt(b.amount)}</div><button class="item-del" onclick="delBill('${b.id}')">✕</button></div>`).join(''):'<div class="empty-state"><div class="emoji">📋</div>None yet</div>'}
@@ -587,9 +592,9 @@ function renderExpenses(c) {
       <div class="form-field2"><label>What was it?</label><input id="exp-name" placeholder="e.g. Harmons, Gas, Costco…"/></div>
       <div class="form-row2">
         <div class="form-field2"><label>Amount $</label><input type="number" id="exp-amt" placeholder="0.00" inputmode="decimal"/></div>
-        <div class="form-field2"><label>Who paid?</label><select id="exp-paid"><option value="jacob">Jacob</option><option value="b">B</option></select></div>
+        <div class="form-field2"><label>Who paid?</label><select id="exp-paid"><option value="jacob">Jacob</option><option value="b">Bambi</option></select></div>
       </div>
-      <div class="form-field2"><label>Category</label><select id="exp-type"><option value="groceries">Groceries (60/40)</option><option value="food">Eating out (60/40)</option><option value="shared">Other shared (60/40)</option><option value="jacob">Jacob personal</option><option value="b">B personal</option></select></div>
+      <div class="form-field2"><label>Category</label><select id="exp-type"><option value="groceries">Groceries (60/40)</option><option value="food">Eating out (60/40)</option><option value="shared">Other shared (60/40)</option><option value="jacob">Jacob personal</option><option value="b">Bambi personal</option></select></div>
       <button class="add-btn" onclick="addExpense()">Add Expense</button>
     </div>
     <div class="section-label">All expenses</div>
@@ -598,7 +603,7 @@ function renderExpenses(c) {
         const isS=['groceries','food','shared'].includes(e.type);
         const jS=isS?e.amount*0.6:(e.type==='jacob'?+e.amount:0);
         const bS=isS?e.amount*0.4:(e.type==='b'?+e.amount:0);
-        return`<div class="item"><div class="item-dot ${isS?'shared':e.type}"></div><div class="item-left"><div class="item-name">${e.name}</div><div class="item-meta">${expLabel(e.type)} · J: ${fmt(jS)} · B: ${fmt(bS)}</div></div><span class="badge ${e.paid}">${e.paid==='jacob'?'Jacob':'B'} paid</span><div class="item-amount">${fmt(e.amount)}</div><button class="item-del" onclick="delExp('${e.id}')">✕</button></div>`;
+        return`<div class="item"><div class="item-dot ${isS?'shared':e.type}"></div><div class="item-left"><div class="item-name">${e.name}</div><div class="item-meta">${expLabel(e.type)} · J: ${fmt(jS)} · B: ${fmt(bS)}</div></div><span class="badge ${e.paid}">${e.paid==='jacob'?'Jacob':'Bambi'} paid</span><div class="item-amount">${fmt(e.amount)}</div><button class="item-del" onclick="delExp('${e.id}')">✕</button></div>`;
       }).join(''):'<div class="empty-state"><div class="emoji">💸</div>No expenses yet</div>'}
     </div>`;
 }
@@ -611,7 +616,7 @@ function renderIncome(c) {
       <div class="form-field2"><label>Source</label><input id="inc-src" placeholder="e.g. Salary, ESPP, 401k…"/></div>
       <div class="form-row2">
         <div class="form-field2"><label>Monthly $</label><input type="number" id="inc-amt" placeholder="0.00" inputmode="decimal"/></div>
-        <div class="form-field2"><label>Whose?</label><select id="inc-who"><option value="jacob">Jacob</option><option value="b">B</option></select></div>
+        <div class="form-field2"><label>Whose?</label><select id="inc-who"><option value="jacob">Jacob</option><option value="b">Bambi</option></select></div>
       </div>
       <button class="add-btn" onclick="addIncome()">Add Income</button>
     </div>
@@ -620,9 +625,9 @@ function renderIncome(c) {
       ${jI.length?jI.map(i=>`<div class="item"><div class="item-dot jacob"></div><div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">Jacob · monthly</div></div><div class="item-amount income">${fmt(i.amount)}</div><button class="item-del" onclick="delInc('${i.id}')">✕</button></div>`).join(''):'<div class="empty-state"><div class="emoji">💰</div>None yet</div>'}
     </div>
     <hr class="section-divider">
-    <div class="section-label">B · ${fmt(c.bIncome)}/mo</div>
+    <div class="section-label">Bambi · ${fmt(c.bIncome)}/mo</div>
     <div class="item-list">
-      ${bI.length?bI.map(i=>`<div class="item"><div class="item-dot b"></div><div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">B · monthly</div></div><div class="item-amount income">${fmt(i.amount)}</div><button class="item-del" onclick="delInc('${i.id}')">✕</button></div>`).join(''):'<div class="empty-state"><div class="emoji">💰</div>None yet</div>'}
+      ${bI.length?bI.map(i=>`<div class="item"><div class="item-dot b"></div><div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">Bambi · monthly</div></div><div class="item-amount income">${fmt(i.amount)}</div><button class="item-del" onclick="delInc('${i.id}')">✕</button></div>`).join(''):'<div class="empty-state"><div class="emoji">💰</div>None yet</div>'}
     </div>`;
 }
 
@@ -639,7 +644,7 @@ function editRow(b, type, saveFn) {
     <div class="item-dot ${type}"></div>
     <div class="item-left">
       <div class="item-name">${b.name}</div>
-      <div class="item-meta">${type==='shared'?`60% share: ${fmt(b.amount*0.6)}`:type==='jacob'?'Jacob only':'B only'}</div>
+      <div class="item-meta">${type==='shared'?`60% share: ${fmt(b.amount*0.6)}`:type==='jacob'?'Jacob only':'Bambi only'}</div>
     </div>
     <div class="item-amount">${type==='shared'?fmt(b.amount*0.6):fmt(b.amount)}</div>
     <button class="item-del" onclick="startFixedEdit('${b.id}')" title="Edit" style="font-size:14px;">✎</button>
@@ -701,8 +706,8 @@ function renderB(c) {
   const homeShare = homeFixed.reduce((s,b)=>s+b.amount,0)*0.4;
   const bIncome = data.incomes.filter(i=>i.who==='b').reduce((s,i)=>s+(+i.amount),0);
   return `
-    ${summaryCard("B's summary", bPersonal, homeShare, bIncome)}
-    <div class="section-label">B's personal fixed bills · ${fmt(bPersonal)}/mo</div>
+    ${summaryCard("Bambi's summary", bPersonal, homeShare, bIncome)}
+    <div class="section-label">Bambi's personal fixed bills · ${fmt(bPersonal)}/mo</div>
     <div class="add-form" style="margin-bottom:10px;">
       <div class="form-title">Add a personal bill</div>
       <div class="form-field2"><label>Bill name</label><input id="bfix-name" placeholder="e.g. Car, Student loan…"/></div>
@@ -773,6 +778,15 @@ function renderBudget() {
 }
 
 // ── Actions ──
+function startIncEdit(id) { editingIncId=id; render(); }
+function cancelIncEdit() { editingIncId=null; render(); }
+async function saveIncEdit(id) {
+  const source = document.getElementById('iedit-src-'+id).value.trim();
+  const amount = parseFloat(document.getElementById('iedit-amt-'+id).value);
+  if(!source||isNaN(amount)||amount<=0){toast('Fill in both fields!',true);return;}
+  const {error} = await sbClient.from('incomes').update({source,amount}).eq('id',id);
+  if(error){toast('Error saving',true);}else{editingIncId=null;toast('Income updated ✓');}
+}
 async function addPayment() {
   const from_who = document.getElementById('pay-from').value;
   const to_who = document.getElementById('pay-to').value;
