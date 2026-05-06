@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#ede9f8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="J&B Budget">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>J&B Budget</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --bg: #f3f0fb;
+  --surface: #ffffff;
+  --surface2: #ede9f8;
+  --border: rgba(139,111,211,0.15);
+  --border2: rgba(139,111,211,0.28);
+  --text: #2d1f5e;
+  --muted: #9585c0;
+  --accent: #7c5cbf;
+  --accent2: #6941c6;
+  --green: #0d9e6e;
+  --red: #dc3545;
+  --pink: #c026a0;
+  --jacob: #6941c6;
+  --b: #c026a0;
+  --shared: #0d9e6e;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --font-display: 'DM Serif Display', serif;
+  --font-body: 'DM Sans', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); overscroll-behavior: none; }
+.app { display: flex; flex-direction: column; height: 100dvh; max-width: 480px; margin: 0 auto; }
+.header { padding: 52px 20px 14px; background: var(--bg); flex-shrink: 0; }
+.header-top { display: flex; align-items: center; justify-content: space-between; }
+.app-title { font-family: var(--font-display); font-size: 26px; letter-spacing: -0.5px; }
+.app-title span { color: var(--accent2); font-style: italic; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 5px; transition: background 0.3s; }
+.status-dot.live { background: var(--green); }
+.status-dot.error { background: var(--red); }
+.status-label { font-size: 12px; color: var(--muted); display: flex; align-items: center; }
+.content { flex: 1; overflow-y: auto; padding: 0 20px 100px; -webkit-overflow-scrolling: touch; }
+.nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: var(--surface); border-top: 1px solid var(--border2); display: flex; padding: 8px 0 max(8px, env(safe-area-inset-bottom)); z-index: 100; box-shadow: 0 -4px 20px rgba(105,65,198,0.07); }
+.nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none; cursor: pointer; padding: 6px 4px; color: var(--muted); font-family: var(--font-body); transition: color 0.2s; }
+.nav-btn.active { color: var(--accent2); }
+.nav-btn svg { width: 22px; height: 22px; }
+.nav-btn span { font-size: 10px; font-weight: 500; letter-spacing: 0.3px; }
+
+/* Setup screen */
+.setup-screen { padding: 24px 0; }
+.setup-card { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; }
+.setup-card h2 { font-size: 17px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
+.setup-card p { font-size: 13px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+.setup-card a { color: var(--accent2); }
+.step-badge { background: var(--accent); color: white; font-size: 11px; font-weight: 700; border-radius: 20px; padding: 2px 10px; display: inline-block; margin-bottom: 10px; letter-spacing: 0.3px; }
+.form-field { margin-bottom: 12px; }
+.form-field label { font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 5px; }
+.form-field input { width: 100%; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius-sm); padding: 10px 12px; color: var(--text); font-family: var(--font-body); font-size: 13px; outline: none; }
+.form-field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(105,65,198,0.1); }
+.form-field input::placeholder { color: var(--muted); font-size: 12px; }
+.save-btn { width: 100%; background: var(--accent); border: none; border-radius: var(--radius-sm); padding: 13px; color: white; font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+.save-btn:active { opacity: 0.8; }
+.info-box { background: rgba(105,65,198,0.07); border: 1px solid rgba(105,65,198,0.2); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 12px; color: var(--accent2); line-height: 1.6; margin-bottom: 12px; }
+
+/* Metrics */
+.metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.metric-label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 5px; }
+.metric-value { font-family: var(--font-display); font-size: 22px; letter-spacing: -0.5px; }
+.metric-value.green { color: var(--green); }
+.metric-value.red { color: var(--red); }
+.metric-value.pink { color: var(--pink); }
+
+/* Settlement */
+.settle-box { background: linear-gradient(135deg, #ede9f8 0%, #e4dcf5 100%); border: 1px solid var(--border2); border-radius: var(--radius); padding: 20px; margin-bottom: 14px; text-align: center; }
+.settle-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.settle-amount { font-family: var(--font-display); font-size: 34px; letter-spacing: -1px; margin-bottom: 4px; }
+.settle-sub { font-size: 12px; color: var(--muted); }
+
+/* List items */
+.section-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin: 18px 0 9px; }
+.item-list { display: flex; flex-direction: column; gap: 7px; }
+.item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 11px 13px; display: flex; align-items: center; gap: 9px; }
+.item-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.item-dot.jacob { background: var(--jacob); }
+.item-dot.b { background: var(--b); }
+.item-dot.shared { background: var(--shared); }
+.item-left { flex: 1; min-width: 0; }
+.item-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.item-amount { font-size: 14px; font-weight: 600; color: var(--red); flex-shrink: 0; }
+.item-amount.income { color: var(--green); }
+.item-del { background: none; border: none; cursor: pointer; color: var(--muted); padding: 4px; border-radius: 6px; font-size: 15px; flex-shrink: 0; }
+.item-del:active { color: var(--red); }
+.badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px; flex-shrink: 0; }
+.badge.jacob { background: rgba(105,65,198,0.12); color: var(--accent2); }
+.badge.b { background: rgba(192,38,160,0.12); color: var(--pink); }
+.badge.shared { background: rgba(13,158,110,0.12); color: var(--shared); }
+.empty-state { text-align: center; padding: 28px 20px; color: var(--muted); font-size: 13px; }
+.empty-state .emoji { font-size: 28px; margin-bottom: 8px; }
+
+/* Add form */
+.add-form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px; margin-bottom: 14px; }
+.form-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 11px; }
+.form-field2 { margin-bottom: 9px; }
+.form-field2 label { font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
+.form-field2 input, .form-field2 select { width: 100%; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius-sm); padding: 9px 11px; color: var(--text); font-family: var(--font-body); font-size: 13px; outline: none; -webkit-appearance: none; appearance: none; }
+.form-field2 input:focus, .form-field2 select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(105,65,198,0.1); }
+.form-field2 input::placeholder { color: var(--muted); }
+.form-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.add-btn { width: 100%; background: var(--accent); border: none; border-radius: var(--radius-sm); padding: 11px; color: white; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 3px; transition: opacity 0.2s; }
+.add-btn:active { opacity: 0.8; }
+.info-note { background: rgba(105,65,198,0.07); border: 1px solid rgba(105,65,198,0.2); border-radius: var(--radius-sm); padding: 9px 13px; font-size: 12px; color: var(--accent2); margin-bottom: 12px; line-height: 1.5; }
+.section-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+/* Loading */
+.loading { display: flex; align-items: center; justify-content: center; height: 120px; color: var(--muted); font-size: 13px; gap: 10px; }
+.spinner { width: 18px; height: 18px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Toast */
+.toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); background: var(--green); color: #0f1f17; font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 20px; z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; }
+.toast.show { opacity: 1; }
+.toast.err { background: var(--red); color: white; }
+
+/* Month pill */
+.month-pill { font-size: 12px; font-weight: 500; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 3px 11px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-top">
+      <div class="app-title">J<span>&</span>B <span style="font-style:normal;color:var(--text)">Budget</span></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="month-pill" id="month-display"></div>
+        <div class="status-label"><span class="status-dot" id="status-dot"></span><span id="status-text">connecting…</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="content" id="content"><div class="setup-screen" id="initial-setup" style="display:none"><div class="info-box">Connect your Supabase database to sync between both phones.</div><div class="setup-card"><div class="step-badge">PASTE YOUR KEYS</div><h2>Enter your Supabase details</h2><p>Go to <a href="https://supabase.com" target="_blank">supabase.com</a> → your project → Settings → API Keys → Legacy tab. Copy the Project URL and anon public key.</p><div class="form-field"><label>Project URL</label><input id="sb-url" placeholder="https://xxxx.supabase.co" /></div><div class="form-field"><label>Anon public key</label><input id="sb-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…" /></div><button class="save-btn" onclick="saveConfig()">Connect & Save →</button></div></div></div>
+  <nav class="nav" id="main-nav" style="display:none;">
+    <button class="nav-btn active" id="nav-overview" onclick="showPage('overview')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span>Overview</span>
+    </button>
+    <button class="nav-btn" id="nav-bills" onclick="showPage('bills')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Bills</span>
+    </button>
+    <button class="nav-btn" id="nav-expenses" onclick="showPage('expenses')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <span>Expenses</span>
+    </button>
+    <button class="nav-btn" id="nav-income" onclick="showPage('income')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+      <span>Income</span>
+    </button>
+    <button class="nav-btn" id="nav-jacob" onclick="showPage('jacob')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span>Jacob</span>
+    </button>
+    <button class="nav-btn" id="nav-b" onclick="showPage('b')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span>B</span>
+    </button>
+    <button class="nav-btn" id="nav-budget" onclick="showPage('budget')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 8h.01M12 8h5M7 12h3M14 12h3"/></svg>
+      <span>Budget</span>
+    </button>
+  </nav>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Config (user fills these in) ──
+const CONFIG_KEY = 'jb-supabase-config';
+const FIXED_KEY = 'jb-fixed-bills';
+let supabase = null;
+let currentPage = 'overview';
+let data = { bills: [], expenses: [], incomes: [] };
+let editingFixedId = null;
+
+const DEFAULT_HOME_FIXED = [
+  {id:'f1', name:'Mortgage',           amount:2184.00},
+  {id:'f2', name:'Mortgage insurance', amount:191.00},
+  {id:'f3', name:'Electricity',        amount:180.00},
+  {id:'f4', name:'Pest control',       amount:44.29},
+  {id:'f5', name:'Trash',              amount:38.00},
+  {id:'f6', name:'Internet',           amount:71.40},
+];
+const DEFAULT_JACOB_FIXED = [
+  {id:'j1', name:'Car',           amount:867.00},
+  {id:'j2', name:'Student loan',  amount:75.00},
+  {id:'j3', name:'Apple',         amount:134.28},
+  {id:'j4', name:'Car insurance', amount:200.00},
+  {id:'j5', name:'Phone bill',    amount:161.00},
+  {id:'j6', name:'Property tax',  amount:291.00},
+];
+function getFixed() {
+  try { return JSON.parse(localStorage.getItem(FIXED_KEY)) || DEFAULT_HOME_FIXED; }
+  catch { return DEFAULT_HOME_FIXED; }
+}
+function getJacobFixed() {
+  try { return JSON.parse(localStorage.getItem(FIXED_KEY+'_jacob')) || DEFAULT_JACOB_FIXED; }
+  catch { return DEFAULT_JACOB_FIXED; }
+}
+function saveFixed(arr) { localStorage.setItem(FIXED_KEY, JSON.stringify(arr)); }
+function saveJacobFixed(arr) { localStorage.setItem(FIXED_KEY+'_jacob', JSON.stringify(arr)); }
+function getBFixed() {
+  try { return JSON.parse(localStorage.getItem(FIXED_KEY+'_b')) || []; }
+  catch { return []; }
+}
+function saveBFixed(arr) { localStorage.setItem(FIXED_KEY+'_b', JSON.stringify(arr)); }
+let bFixedNextId = Date.now();
+
+const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+document.getElementById('month-display').textContent = months[new Date().getMonth()] + ' ' + new Date().getFullYear();
+
+function fmt(n) { return '$' + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtSigned(n) { return (n>=0?'+':'-') + fmt(n); }
+
+function toast(msg, err=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err?' err':'');
+  setTimeout(() => t.className = 'toast', 2200);
+}
+
+function setStatus(state) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  if(state==='live') { dot.className='status-dot live'; txt.textContent='live'; }
+  else if(state==='error') { dot.className='status-dot error'; txt.textContent='offline'; }
+  else { dot.className='status-dot'; txt.textContent='connecting…'; }
+}
+
+// ── Setup screen ──
+function showSetup() {
+  document.getElementById('main-nav').style.display = 'none';
+  setStatus('error');
+  document.getElementById('content').innerHTML = `
+    <div class="setup-screen" style="display:block">
+      <div class="info-box">
+        You need a free <strong>Supabase</strong> account to sync data between both phones. Takes about 5 minutes — follow the steps below.
+      </div>
+
+      <div class="setup-card">
+        <div class="step-badge">STEP 1</div>
+        <h2>Create a free Supabase account</h2>
+        <p>Go to <a href="https://supabase.com" target="_blank">supabase.com</a> → Sign up free → Create a new project (name it "jb-budget", pick any password & region).</p>
+      </div>
+
+      <div class="setup-card">
+        <div class="step-badge">STEP 2</div>
+        <h2>Create the 3 database tables</h2>
+        <p>In your Supabase project, click <strong>SQL Editor</strong> in the left sidebar, paste this SQL and click <strong>Run</strong>:</p>
+        <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px;font-family:monospace;font-size:11px;color:var(--accent2);line-height:1.6;margin-bottom:8px;overflow-x:auto;white-space:pre;">create table bills (
+  id uuid default gen_random_uuid() primary key,
+  name text, amount numeric,
+  type text, created_at timestamptz default now()
+);
+create table expenses (
+  id uuid default gen_random_uuid() primary key,
+  name text, amount numeric, paid text,
+  type text, created_at timestamptz default now()
+);
+create table incomes (
+  id uuid default gen_random_uuid() primary key,
+  source text, amount numeric,
+  who text, created_at timestamptz default now()
+);
+alter table bills enable row level security;
+alter table expenses enable row level security;
+alter table incomes enable row level security;
+create policy "open" on bills for all using (true) with check (true);
+create policy "open" on expenses for all using (true) with check (true);
+create policy "open" on incomes for all using (true) with check (true);</div>
+      </div>
+
+      <div class="setup-card">
+        <div class="step-badge">STEP 3</div>
+        <h2>Paste your keys below</h2>
+        <p>In Supabase go to <strong>Settings → API</strong>. Copy your <strong>Project URL</strong> and <strong>anon public</strong> key and paste them here.</p>
+        <div class="form-field">
+          <label>Project URL</label>
+          <input id="sb-url" placeholder="https://xxxxxxxxxxxx.supabase.co" />
+        </div>
+        <div class="form-field">
+          <label>Anon public key</label>
+          <input id="sb-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…" />
+        </div>
+        <button class="save-btn" onclick="saveConfig()">Connect & Save →</button>
+      </div>
+    </div>`;
+}
+
+async function saveConfig() {
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  if(!url || !key) { toast('Paste both fields!', true); return; }
+  localStorage.setItem(CONFIG_KEY, JSON.stringify({url, key}));
+  await initSupabase(url, key);
+}
+
+// ── Supabase init ──
+async function initSupabase(url, key) {
+  try {
+    supabase = window.supabase.createClient(url, key);
+    await loadAll();
+    subscribeRealtime();
+    document.getElementById('main-nav').style.display = 'flex';
+    setStatus('live');
+    showPage('overview');
+  } catch(e) {
+    setStatus('error');
+    toast('Connection failed — check your keys', true);
+    showSetup();
+  }
+}
+
+async function loadAll() {
+  const [b, e, i] = await Promise.all([
+    supabase.from('bills').select('*').order('created_at'),
+    supabase.from('expenses').select('*').order('created_at'),
+    supabase.from('incomes').select('*').order('created_at'),
+  ]);
+  if(b.error || e.error || i.error) throw new Error('load failed');
+  data.bills = b.data || [];
+  data.expenses = e.data || [];
+  data.incomes = i.data || [];
+}
+
+function subscribeRealtime() {
+  supabase.channel('db-changes')
+    .on('postgres_changes', {event:'*', schema:'public', table:'bills'}, async () => { await reload('bills'); render(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'expenses'}, async () => { await reload('expenses'); render(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'incomes'}, async () => { await reload('incomes'); render(); })
+    .subscribe(status => {
+      if(status === 'SUBSCRIBED') setStatus('live');
+      else if(status === 'CHANNEL_ERROR') setStatus('error');
+    });
+}
+
+async function reload(table) {
+  const {data: rows} = await supabase.from(table).select('*').order('created_at');
+  data[table] = rows || [];
+}
+
+// ── Navigation ──
+function showPage(page) {
+  currentPage = page;
+  ['overview','bills','expenses','income','jacob','b','budget'].forEach(p =>
+    document.getElementById('nav-'+p).classList.toggle('active', p===page));
+  render();
+}
+
+// ── Calculations ──
+function calc() {
+  let jIncome=0, bIncome=0;
+  data.incomes.forEach(i => i.who==='jacob' ? jIncome+=+i.amount : bIncome+=+i.amount);
+  let jBillsOwed=0, bBillsOwed=0;
+  // Fixed home bills are always shared 60/40
+  getFixed().forEach(b => { jBillsOwed+=b.amount*0.6; bBillsOwed+=b.amount*0.4; });
+  // Jacob's personal fixed bills
+  getJacobFixed().forEach(b => { jBillsOwed+=b.amount; });
+  // B's personal fixed bills
+  getBFixed().forEach(b => { bBillsOwed+=b.amount; });
+  data.bills.forEach(b => {
+    if(b.type==='jacob') jBillsOwed+=+b.amount;
+    else { jBillsOwed+=b.amount*0.6; bBillsOwed+=b.amount*0.4; }
+  });
+  let jExpOwed=0, bExpOwed=0;
+  data.expenses.forEach(e => {
+    const s=['groceries','food','shared'].includes(e.type);
+    if(s){jExpOwed+=e.amount*0.6;bExpOwed+=e.amount*0.4;}
+    else if(e.type==='jacob') jExpOwed+=+e.amount;
+    else bExpOwed+=+e.amount;
+  });
+  let balance=0;
+  data.expenses.forEach(e => {
+    if(!['groceries','food','shared'].includes(e.type)) return;
+    balance += e.paid==='jacob' ? e.amount*0.4 : -e.amount*0.6;
+  });
+  getFixed().forEach(b => { balance+=b.amount*0.4; });
+  data.bills.forEach(b => { if(b.type==='shared') balance+=b.amount*0.4; });
+  return {jIncome,bIncome,jOut:jBillsOwed+jExpOwed,bOut:bBillsOwed+bExpOwed,balance};
+}
+
+// ── Render ──
+function render() {
+  const c = calc();
+  const pages = {overview:renderOverview,bills:renderBills,expenses:renderExpenses,income:renderIncome,jacob:renderJacob,b:renderB,budget:renderBudget};
+  document.getElementById('content').innerHTML = pages[currentPage](c);
+}
+
+function expLabel(t) {
+  return{groceries:'Groceries',food:'Eating out',shared:'Other shared',jacob:'Jacob personal',b:'B personal'}[t]||t;
+}
+
+function renderOverview(c) {
+  const jNet=c.jIncome-c.jOut, bNet=c.bIncome-c.bOut;
+  let sColor='color:var(--text)', sTxt='All even! 🎉', sWho="You're all squared up";
+  if(Math.abs(c.balance)>=0.01) {
+    if(c.balance>0){sColor='color:var(--green)';sTxt=fmt(c.balance);sWho='B owes Jacob';}
+    else{sColor='color:var(--red)';sTxt=fmt(c.balance);sWho='Jacob owes B';}
+  }
+  const recent=data.expenses.slice(-5).reverse();
+  return `
+    <div class="metrics-grid">
+      <div class="metric-card"><div class="metric-label">Jacob income</div><div class="metric-value green">${fmt(c.jIncome)}</div></div>
+      <div class="metric-card"><div class="metric-label">B income</div><div class="metric-value pink">${fmt(c.bIncome)}</div></div>
+      <div class="metric-card"><div class="metric-label">Jacob net</div><div class="metric-value ${jNet>=0?'green':'red'}">${fmtSigned(jNet)}</div></div>
+      <div class="metric-card"><div class="metric-label">B net</div><div class="metric-value ${bNet>=0?'green':'red'}">${fmtSigned(bNet)}</div></div>
+    </div>
+    <div class="settle-box">
+      <div class="settle-label">Settlement</div>
+      <div class="settle-amount" style="${sColor}">${sTxt}</div>
+      <div class="settle-sub">${sWho} · 60/40 split</div>
+    </div>
+    <div class="section-label">Recent expenses</div>
+    <div class="item-list">
+      ${recent.length?recent.map(e=>`
+        <div class="item">
+          <div class="item-dot ${['groceries','food','shared'].includes(e.type)?'shared':e.type}"></div>
+          <div class="item-left"><div class="item-name">${e.name}</div><div class="item-meta">${expLabel(e.type)} · ${e.paid==='jacob'?'Jacob':'B'} paid</div></div>
+          <div class="item-amount">${fmt(e.amount)}</div>
+        </div>`).join(''):'<div class="empty-state"><div class="emoji">🧾</div>No expenses yet</div>'}
+    </div>`;
+}
+
+function renderBills(c) {
+  const jB=data.bills.filter(b=>b.type==='jacob'), sB=data.bills.filter(b=>b.type==='shared');
+  const fixed=getFixed();
+  const fixedTotal=fixed.reduce((s,b)=>s+b.amount,0);
+  const fixedRows=fixed.map(b=>{
+    if(editingFixedId===b.id) return `
+      <div class="item" style="flex-wrap:wrap;gap:8px;">
+        <div class="item-dot shared"></div>
+        <div class="item-left"><input id="fedit-name-${b.id}" value="${b.name}" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/></div>
+        <input id="fedit-amt-${b.id}" type="number" value="${b.amount}" inputmode="decimal" style="width:90px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/>
+        <button onclick="saveFixedEdit('${b.id}')" style="background:var(--accent);border:none;border-radius:8px;padding:6px 14px;color:white;font-family:var(--font-body);font-size:12px;font-weight:600;cursor:pointer;">Save</button>
+        <button onclick="cancelFixedEdit()" style="background:none;border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--muted);font-family:var(--font-body);font-size:12px;cursor:pointer;">Cancel</button>
+      </div>`;
+    return `<div class="item">
+      <div class="item-dot shared"></div>
+      <div class="item-left"><div class="item-name">${b.name}</div><div class="item-meta">J: ${fmt(b.amount*0.6)} · B: ${fmt(b.amount*0.4)}</div></div>
+      <div class="item-amount">${fmt(b.amount)}</div>
+      <button class="item-del" onclick="startFixedEdit('${b.id}')" title="Edit" style="font-size:14px;">✎</button>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="section-label">🏠 Fixed home bills · shared 60/40 · ${fmt(fixedTotal)}/mo</div>
+    <div class="item-list">${fixedRows}</div>
+    <hr class="section-divider">
+    <div class="add-form">
+      <div class="form-title">Add another bill</div>
+      <div class="form-field2"><label>Bill name</label><input id="bill-name" placeholder="e.g. Car, Student loan…"/></div>
+      <div class="form-row2">
+        <div class="form-field2"><label>Monthly $</label><input type="number" id="bill-amt" placeholder="0.00" inputmode="decimal"/></div>
+        <div class="form-field2"><label>Type</label><select id="bill-type"><option value="jacob">Jacob only</option><option value="shared">Shared (60/40)</option></select></div>
+      </div>
+      <button class="add-btn" onclick="addBill()">Add Bill</button>
+    </div>
+    <div class="info-note">Shared bills: Jacob 60% · B 40%</div>
+    <div class="section-label">Jacob's bills</div>
+    <div class="item-list">
+      ${jB.length?jB.map(b=>`<div class="item"><div class="item-dot jacob"></div><div class="item-left"><div class="item-name">${b.name}</div><div class="item-meta">Jacob only · monthly</div></div><div class="item-amount">${fmt(b.amount)}</div><button class="item-del" onclick="delBill('${b.id}')">✕</button></div>`).join(''):'<div class="empty-state"><div class="emoji">📋</div>None yet</div>'}
+    </div>
+    <hr class="section-divider">
+    <div class="section-label">Other shared bills (60/40)</div>
+    <div class="item-list">
+      ${sB.length?sB.map(b=>`<div class="item"><div class="item-dot shared"></div><div class="item-left"><div class="item-name">${b.name}</div><div class="item-meta">J: ${fmt(b.amount*0.6)} · B: ${fmt(b.amount*0.4)}</div></div><div class="item-amount">${fmt(b.amount)}</div><button class="item-del" onclick="delBill('${b.id}')">✕</button></div>`).join(''):'<div class="empty-state"><div class="emoji">🏠</div>None yet</div>'}
+    </div>`;
+}
+
+function startFixedEdit(id) { editingFixedId=id; render(); }
+function cancelFixedEdit() { editingFixedId=null; render(); }
+function saveFixedEdit(id, type) {
+  const name=document.getElementById('fedit-name-'+id).value.trim();
+  const amount=parseFloat(document.getElementById('fedit-amt-'+id).value);
+  if(!name||isNaN(amount)||amount<=0){toast('Fill in both fields!',true);return;}
+  if(type==='jacob') {
+    const arr=getJacobFixed();
+    const idx=arr.findIndex(b=>b.id===id);
+    if(idx>-1){arr[idx].name=name;arr[idx].amount=amount;}
+    saveJacobFixed(arr);
+  } else if(type==='b') {
+    const arr=getBFixed();
+    const idx=arr.findIndex(b=>b.id===id);
+    if(idx>-1){arr[idx].name=name;arr[idx].amount=amount;}
+    saveBFixed(arr);
+  } else {
+    const arr=getFixed();
+    const idx=arr.findIndex(b=>b.id===id);
+    if(idx>-1){arr[idx].name=name;arr[idx].amount=amount;}
+    saveFixed(arr);
+  }
+  editingFixedId=null;
+  toast('Bill updated ✓');
+  render();
+}
+
+function renderExpenses(c) {
+  const all=data.expenses.slice().reverse();
+  return `
+    <div class="add-form">
+      <div class="form-title">Add an expense</div>
+      <div class="form-field2"><label>What was it?</label><input id="exp-name" placeholder="e.g. Harmons, Gas, Costco…"/></div>
+      <div class="form-row2">
+        <div class="form-field2"><label>Amount $</label><input type="number" id="exp-amt" placeholder="0.00" inputmode="decimal"/></div>
+        <div class="form-field2"><label>Who paid?</label><select id="exp-paid"><option value="jacob">Jacob</option><option value="b">B</option></select></div>
+      </div>
+      <div class="form-field2"><label>Category</label><select id="exp-type"><option value="groceries">Groceries (60/40)</option><option value="food">Eating out (60/40)</option><option value="shared">Other shared (60/40)</option><option value="jacob">Jacob personal</option><option value="b">B personal</option></select></div>
+      <button class="add-btn" onclick="addExpense()">Add Expense</button>
+    </div>
+    <div class="section-label">All expenses</div>
+    <div class="item-list">
+      ${all.length?all.map(e=>{
+        const isS=['groceries','food','shared'].includes(e.type);
+        const jS=isS?e.amount*0.6:(e.type==='jacob'?+e.amount:0);
+        const bS=isS?e.amount*0.4:(e.type==='b'?+e.amount:0);
+        return`<div class="item"><div class="item-dot ${isS?'shared':e.type}"></div><div class="item-left"><div class="item-name">${e.name}</div><div class="item-meta">${expLabel(e.type)} · J: ${fmt(jS)} · B: ${fmt(bS)}</div></div><span class="badge ${e.paid}">${e.paid==='jacob'?'Jacob':'B'} paid</span><div class="item-amount">${fmt(e.amount)}</div><button class="item-del" onclick="delExp('${e.id}')">✕</button></div>`;
+      }).join(''):'<div class="empty-state"><div class="emoji">💸</div>No expenses yet</div>'}
+    </div>`;
+}
+
+function renderIncome(c) {
+  const jI=data.incomes.filter(i=>i.who==='jacob'), bI=data.incomes.filter(i=>i.who==='b');
+  return `
+    <div class="add-form">
+      <div class="form-title">Add income</div>
+      <div class="form-field2"><label>Source</label><input id="inc-src" placeholder="e.g. Salary, ESPP, 401k…"/></div>
+      <div class="form-row2">
+        <div class="form-field2"><label>Monthly $</label><input type="number" id="inc-amt" placeholder="0.00" inputmode="decimal"/></div>
+        <div class="form-field2"><label>Whose?</label><select id="inc-who"><option value="jacob">Jacob</option><option value="b">B</option></select></div>
+      </div>
+      <button class="add-btn" onclick="addIncome()">Add Income</button>
+    </div>
+    <div class="section-label">Jacob · ${fmt(c.jIncome)}/mo</div>
+    <div class="item-list">
+      ${jI.length?jI.map(i=>`<div class="item"><div class="item-dot jacob"></div><div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">Jacob · monthly</div></div><div class="item-amount income">${fmt(i.amount)}</div><button class="item-del" onclick="delInc('${i.id}')">✕</button></div>`).join(''):'<div class="empty-state"><div class="emoji">💰</div>None yet</div>'}
+    </div>
+    <hr class="section-divider">
+    <div class="section-label">B · ${fmt(c.bIncome)}/mo</div>
+    <div class="item-list">
+      ${bI.length?bI.map(i=>`<div class="item"><div class="item-dot b"></div><div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">B · monthly</div></div><div class="item-amount income">${fmt(i.amount)}</div><button class="item-del" onclick="delInc('${i.id}')">✕</button></div>`).join(''):'<div class="empty-state"><div class="emoji">💰</div>None yet</div>'}
+    </div>`;
+}
+
+function editRow(b, type, saveFn) {
+  if(editingFixedId === b.id) return `
+    <div class="item" style="flex-wrap:wrap;gap:8px;">
+      <div class="item-dot ${type}"></div>
+      <div class="item-left"><input id="fedit-name-${b.id}" value="${b.name}" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/></div>
+      <input id="fedit-amt-${b.id}" type="number" value="${b.amount}" inputmode="decimal" style="width:90px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/>
+      <button onclick="${saveFn}('${b.id}','${type}')" style="background:var(--accent);border:none;border-radius:8px;padding:6px 14px;color:white;font-family:var(--font-body);font-size:12px;font-weight:600;cursor:pointer;">Save</button>
+      <button onclick="cancelFixedEdit()" style="background:none;border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--muted);font-family:var(--font-body);font-size:12px;cursor:pointer;">Cancel</button>
+    </div>`;
+  return `<div class="item">
+    <div class="item-dot ${type}"></div>
+    <div class="item-left">
+      <div class="item-name">${b.name}</div>
+      <div class="item-meta">${type==='shared'?`60% share: ${fmt(b.amount*0.6)}`:type==='jacob'?'Jacob only':'B only'}</div>
+    </div>
+    <div class="item-amount">${type==='shared'?fmt(b.amount*0.6):fmt(b.amount)}</div>
+    <button class="item-del" onclick="startFixedEdit('${b.id}')" title="Edit" style="font-size:14px;">✎</button>
+  </div>`;
+}
+
+function summaryCard(label, personal, homeShare, income) {
+  const totalOut = personal + homeShare;
+  const net = income - totalOut;
+  return `
+    <div class="settle-box" style="text-align:left;padding:18px 20px;margin-bottom:14px;">
+      <div class="settle-label">${label}</div>
+      ${income>0?`<div style="font-size:12px;color:var(--green);font-weight:600;margin-bottom:6px;">Income: ${fmt(income)}/mo</div>`:''}
+      <div class="settle-amount" style="color:var(--accent2);font-size:28px;">${fmt(totalOut)}<span style="font-size:14px;color:var(--muted);font-weight:400;font-family:var(--font-body);"> /mo out</span></div>
+      ${income>0?`<div style="font-size:13px;margin-top:6px;font-weight:600;color:${net>=0?'var(--green)':'var(--red)'};">Net: ${fmtSigned(net)}/mo</div>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
+        <div style="background:var(--bg);border-radius:10px;padding:10px 12px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">Personal bills</div>
+          <div style="font-size:17px;font-weight:600;color:var(--text);">${fmt(personal)}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:10px;padding:10px 12px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">Home share</div>
+          <div style="font-size:17px;font-weight:600;color:var(--text);">${fmt(homeShare)}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderJacob(c) {
+  const jacobFixed = getJacobFixed();
+  const homeFixed = getFixed();
+  const jacobPersonal = jacobFixed.reduce((s,b)=>s+b.amount,0);
+  const homeShare = homeFixed.reduce((s,b)=>s+b.amount,0)*0.6;
+  const jacobIncome = data.incomes.filter(i=>i.who==='jacob').reduce((s,i)=>s+(+i.amount),0);
+  return `
+    ${summaryCard("Jacob's summary", jacobPersonal, homeShare, jacobIncome)}
+    <div class="section-label">Personal fixed bills · ${fmt(jacobPersonal)}/mo</div>
+    <div class="item-list">${jacobFixed.map(b=>editRow(b,'jacob','saveFixedEdit')).join('')}</div>
+    <hr class="section-divider">
+    <div class="section-label">Home bills — 60% share · ${fmt(homeShare)}/mo</div>
+    <div class="item-list">${homeFixed.map(b=>editRow(b,'shared','saveFixedEdit')).join('')}</div>
+    <hr class="section-divider">
+    <div class="section-label">Income</div>
+    <div class="item-list">
+      ${data.incomes.filter(i=>i.who==='jacob').map(i=>`
+        <div class="item">
+          <div class="item-dot jacob"></div>
+          <div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">Monthly</div></div>
+          <div class="item-amount income">${fmt(i.amount)}</div>
+          <button class="item-del" onclick="delInc('${i.id}')">✕</button>
+        </div>`).join('') || '<div class="empty-state"><div class="emoji">💰</div>Add income in the Income tab</div>'}
+    </div>`;
+}
+
+function renderB(c) {
+  const bFixed = getBFixed();
+  const homeFixed = getFixed();
+  const bPersonal = bFixed.reduce((s,b)=>s+b.amount,0);
+  const homeShare = homeFixed.reduce((s,b)=>s+b.amount,0)*0.4;
+  const bIncome = data.incomes.filter(i=>i.who==='b').reduce((s,i)=>s+(+i.amount),0);
+  return `
+    ${summaryCard("B's summary", bPersonal, homeShare, bIncome)}
+    <div class="section-label">B's personal fixed bills · ${fmt(bPersonal)}/mo</div>
+    <div class="add-form" style="margin-bottom:10px;">
+      <div class="form-title">Add a personal bill</div>
+      <div class="form-field2"><label>Bill name</label><input id="bfix-name" placeholder="e.g. Car, Student loan…"/></div>
+      <div class="form-field2"><label>Monthly $</label><input type="number" id="bfix-amt" placeholder="0.00" inputmode="decimal"/></div>
+      <button class="add-btn" onclick="addBFixed()">Add Bill</button>
+    </div>
+    <div class="item-list">
+      ${bFixed.length?bFixed.map(b=>editRow(b,'b','saveBFixedEdit')).join(''):'<div class="empty-state"><div class="emoji">📋</div>No personal bills added yet</div>'}
+    </div>
+    <hr class="section-divider">
+    <div class="section-label">Home bills — 40% share · ${fmt(homeShare)}/mo</div>
+    <div class="item-list">${homeFixed.map(b=>editRow(b,'shared','saveFixedEdit')).join('')}</div>
+    <hr class="section-divider">
+    <div class="section-label">Income</div>
+    <div class="item-list">
+      ${data.incomes.filter(i=>i.who==='b').map(i=>`
+        <div class="item">
+          <div class="item-dot b"></div>
+          <div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">Monthly</div></div>
+          <div class="item-amount income">${fmt(i.amount)}</div>
+          <button class="item-del" onclick="delInc('${i.id}')">✕</button>
+        </div>`).join('') || '<div class="empty-state"><div class="emoji">💰</div>Add income in the Income tab</div>'}
+    </div>`;
+}
+
+function renderBudget() {
+  const homeFixed = getFixed();
+  const jacobFixed = getJacobFixed();
+  const bFixed = getBFixed();
+  const homeTotal = homeFixed.reduce((s,b)=>s+b.amount,0);
+  const jacobPersonal = jacobFixed.reduce((s,b)=>s+b.amount,0);
+  const bPersonal = bFixed.reduce((s,b)=>s+b.amount,0);
+  const jacobIncome = data.incomes.filter(i=>i.who==='jacob').reduce((s,i)=>s+(+i.amount),0);
+  const bIncome = data.incomes.filter(i=>i.who==='b').reduce((s,i)=>s+(+i.amount),0);
+  const totalIncome = jacobIncome + bIncome;
+  const totalFixed = homeTotal + jacobPersonal + bPersonal;
+  const remaining = totalIncome - totalFixed;
+  return `
+    <div class="settle-box" style="text-align:left;padding:18px 20px;margin-bottom:14px;">
+      <div class="settle-label">Combined monthly picture</div>
+      <div class="settle-amount" style="color:var(--accent2);font-size:28px;">${fmt(totalIncome)}<span style="font-size:14px;color:var(--muted);font-weight:400;font-family:var(--font-body);"> total income</span></div>
+      ${totalIncome>0?`<div style="font-size:13px;margin-top:6px;font-weight:600;color:${remaining>=0?'var(--green)':'var(--red)'};">After fixed bills: ${fmtSigned(remaining)}/mo</div>`:'<div style="font-size:12px;color:var(--muted);margin-top:6px;">Add income in the Income tab to see your full picture</div>'}
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px;">
+        <div style="background:var(--bg);border-radius:10px;padding:10px 10px;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Home bills</div>
+          <div style="font-size:15px;font-weight:600;color:var(--text);">${fmt(homeTotal)}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:10px;padding:10px 10px;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Jacob bills</div>
+          <div style="font-size:15px;font-weight:600;color:var(--text);">${fmt(jacobPersonal)}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:10px;padding:10px 10px;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">B bills</div>
+          <div style="font-size:15px;font-weight:600;color:var(--text);">${fmt(bPersonal)}</div>
+        </div>
+      </div>
+    </div>
+    <div class="section-label">Budget categories</div>
+    <div class="item" style="flex-direction:column;align-items:flex-start;gap:6px;padding:16px;">
+      <div style="font-size:13px;color:var(--muted);line-height:1.7;">
+        This tab is ready for your budgeting goals. Come back to Claude whenever you're ready to add:<br><br>
+        · Monthly spending limits per category<br>
+        · Savings goals (vacation, emergency fund, etc.)<br>
+        · Debt payoff tracker<br>
+        · Any other budgeting features you want
+      </div>
+    </div>`;
+}
+
+// ── Actions ──
+async function addBill() {
+  const name=document.getElementById('bill-name').value.trim();
+  const amount=parseFloat(document.getElementById('bill-amt').value);
+  const type=document.getElementById('bill-type').value;
+  if(!name||isNaN(amount)||amount<=0){toast('Fill in all fields!',true);return;}
+  const {error}=await supabase.from('bills').insert({name,amount,type});
+  if(error){toast('Error saving',true);}else{toast('Bill added ✓');}
+}
+async function delBill(id) {
+  await supabase.from('bills').delete().eq('id',id);
+}
+
+async function addExpense() {
+  const name=document.getElementById('exp-name').value.trim();
+  const amount=parseFloat(document.getElementById('exp-amt').value);
+  const paid=document.getElementById('exp-paid').value;
+  const type=document.getElementById('exp-type').value;
+  if(!name||isNaN(amount)||amount<=0){toast('Fill in all fields!',true);return;}
+  const {error}=await supabase.from('expenses').insert({name,amount,paid,type});
+  if(error){toast('Error saving',true);}else{toast('Expense added ✓');}
+}
+async function delExp(id) {
+  await supabase.from('expenses').delete().eq('id',id);
+}
+
+function addBFixed() {
+  const name = document.getElementById('bfix-name').value.trim();
+  const amount = parseFloat(document.getElementById('bfix-amt').value);
+  if(!name||isNaN(amount)||amount<=0){toast('Fill in all fields!',true);return;}
+  const arr = getBFixed();
+  arr.push({id:'b'+Date.now(), name, amount});
+  saveBFixed(arr);
+  toast('Bill added ✓');
+  render();
+}
+function saveBFixedEdit(id) {
+  const name=document.getElementById('fedit-name-'+id).value.trim();
+  const amount=parseFloat(document.getElementById('fedit-amt-'+id).value);
+  if(!name||isNaN(amount)||amount<=0){toast('Fill in both fields!',true);return;}
+  const arr=getBFixed();
+  const idx=arr.findIndex(b=>b.id===id);
+  if(idx>-1){arr[idx].name=name;arr[idx].amount=amount;}
+  saveBFixed(arr);
+  editingFixedId=null;
+  toast('Bill updated ✓');
+  render();
+}
+function delBFixed(id) {
+  saveBFixed(getBFixed().filter(b=>b.id!==id));
+  render();
+}
+async function addIncome() {
+  const source=document.getElementById('inc-src').value.trim();
+  const amount=parseFloat(document.getElementById('inc-amt').value);
+  const who=document.getElementById('inc-who').value;
+  if(!source||isNaN(amount)||amount<=0){toast('Fill in all fields!',true);return;}
+  const {error}=await supabase.from('incomes').insert({source,amount,who});
+  if(error){toast('Error saving',true);}else{toast('Income added ✓');}
+}
+async function delInc(id) {
+  await supabase.from('incomes').delete().eq('id',id);
+}
+
+// ── Boot ──
+(async () => {
+  const saved = localStorage.getItem(CONFIG_KEY);
+  if(saved) {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div>Connecting…</div>';
+    try {
+      const {url,key} = JSON.parse(saved);
+      await initSupabase(url,key);
+    } catch(e) {
+      showSetup();
+    }
+  } else {
+    showSetup();
+  }
+})();
+
+// service worker disabled
+</script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>J&B Budget — Setup Guide (Real-Time Sync)</title>
+<style>
+body { font-family: -apple-system, sans-serif; background: #0f0f1a; color: #f0eff6; padding: 24px; max-width: 620px; margin: 0 auto; line-height: 1.6; }
+h1 { font-size: 24px; margin-bottom: 4px; }
+h1 span { color: #a78bfa; }
+.sub { color: #8884a0; font-size: 14px; margin-bottom: 32px; }
+.step { background: #1a1a2e; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+.step-num { background: #7c6af7; color: white; font-weight: 700; font-size: 12px; border-radius: 20px; padding: 2px 10px; display: inline-block; margin-bottom: 10px; }
+.step h2 { font-size: 16px; margin-bottom: 8px; }
+.step p, .step li { font-size: 14px; color: #c4c0d8; }
+.step ul { padding-left: 20px; }
+.step li { margin-bottom: 6px; }
+code { background: #22223b; padding: 2px 8px; border-radius: 6px; font-size: 12px; color: #a78bfa; font-family: monospace; }
+pre { background: #22223b; border-radius: 10px; padding: 14px; font-size: 12px; color: #a78bfa; font-family: monospace; overflow-x: auto; margin: 12px 0; line-height: 1.6; }
+a { color: #a78bfa; }
+.note { background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.2); border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #34d399; margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>J<span>&</span>B Budget</h1>
+<p class="sub">Real-time sync setup guide — takes about 10 minutes total</p>
+
+<div class="step">
+  <div class="step-num">STEP 1 — Supabase account (free)</div>
+  <h2>Create your database</h2>
+  <ul>
+    <li>Go to <a href="https://supabase.com" target="_blank">supabase.com</a> and click <strong>Start for free</strong></li>
+    <li>Sign up and create a new project — name it <strong>jb-budget</strong></li>
+    <li>Pick any password (save it) and choose the region closest to you</li>
+    <li>Wait ~1 minute for it to set up</li>
+  </ul>
+</div>
+
+<div class="step">
+  <div class="step-num">STEP 2 — Create the tables</div>
+  <h2>Run this SQL in Supabase</h2>
+  <p>In your project, click <strong>SQL Editor</strong> in the left sidebar. Paste the code below and click <strong>Run</strong>:</p>
+  <pre>create table bills (
+  id uuid default gen_random_uuid() primary key,
+  name text, amount numeric,
+  type text, created_at timestamptz default now()
+);
+create table expenses (
+  id uuid default gen_random_uuid() primary key,
+  name text, amount numeric, paid text,
+  type text, created_at timestamptz default now()
+);
+create table incomes (
+  id uuid default gen_random_uuid() primary key,
+  source text, amount numeric,
+  who text, created_at timestamptz default now()
+);
+alter table bills enable row level security;
+alter table expenses enable row level security;
+alter table incomes enable row level security;
+create policy "open" on bills for all using (true) with check (true);
+create policy "open" on expenses for all using (true) with check (true);
+create policy "open" on incomes for all using (true) with check (true);</pre>
+  <p>You should see "Success. No rows returned." — that's correct!</p>
+</div>
+
+<div class="step">
+  <div class="step-num">STEP 3 — Get your keys</div>
+  <h2>Copy your Project URL and API key</h2>
+  <ul>
+    <li>In Supabase, click <strong>Settings</strong> (gear icon) → <strong>API</strong></li>
+    <li>Copy the <strong>Project URL</strong> (looks like <code>https://abc123.supabase.co</code>)</li>
+    <li>Copy the <strong>anon public</strong> key (long string starting with <code>eyJ…</code>)</li>
+  </ul>
+</div>
+
+<div class="step">
+  <div class="step-num">STEP 4 — Host the app on GitHub Pages</div>
+  <h2>Put the app online for free</h2>
+  <ul>
+    <li>Go to <a href="https://github.com" target="_blank">github.com</a> → create a free account</li>
+    <li>Click <strong>+</strong> → <strong>New repository</strong> → name it <code>jb-budget</code> → Public → Create</li>
+    <li>Click <strong>uploading an existing file</strong></li>
+    <li>Drag in all files from this zip (index.html, manifest.json, sw.js, icons folder)</li>
+    <li>Click <strong>Commit changes</strong></li>
+    <li>Go to <strong>Settings → Pages</strong> → select branch <strong>main</strong> → Save</li>
+    <li>Your app will be live at <code>https://YOUR-USERNAME.github.io/jb-budget</code></li>
+  </ul>
+</div>
+
+<div class="step">
+  <div class="step-num">STEP 5 — Connect & install on both phones</div>
+  <h2>Final step!</h2>
+  <ul>
+    <li>Open the GitHub Pages link on your phone</li>
+    <li>The app will ask for your Supabase URL and key — paste them in and tap Connect</li>
+    <li>It saves the keys on the phone — you only do this once per phone</li>
+    <li>Send the same link to B, she opens it, pastes the same keys, done!</li>
+    <li>Now both phones: tap Share → <strong>Add to Home Screen</strong> (Safari on iPhone)</li>
+  </ul>
+  <div class="note">✓ After setup, any expense Jacob adds instantly appears on B's phone and vice versa — live!</div>
+</div>
+</body>
+</html>
