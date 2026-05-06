@@ -182,7 +182,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 // ── Config (user fills these in) ──
 const CONFIG_KEY = 'jb-supabase-config';
 const FIXED_KEY = 'jb-fixed-bills';
-let supabase = null;
+let sbClient = null;
 let currentPage = 'overview';
 let data = { bills: [], expenses: [], incomes: [] };
 let editingFixedId = null;
@@ -312,7 +312,7 @@ async function saveConfig() {
 // ── Supabase init ──
 async function initSupabase(url, key) {
   try {
-    supabase = window.supabase.createClient(url, key);
+    sbClient = window.supabase.createClient(url, key);
     await loadAll();
     subscribeRealtime();
     document.getElementById('main-nav').style.display = 'flex';
@@ -327,9 +327,9 @@ async function initSupabase(url, key) {
 
 async function loadAll() {
   const [b, e, i] = await Promise.all([
-    supabase.from('bills').select('*').order('created_at'),
-    supabase.from('expenses').select('*').order('created_at'),
-    supabase.from('incomes').select('*').order('created_at'),
+    sbClient.from('bills').select('*').order('created_at'),
+    sbClient.from('expenses').select('*').order('created_at'),
+    sbClient.from('incomes').select('*').order('created_at'),
   ]);
   if(b.error || e.error || i.error) throw new Error('load failed');
   data.bills = b.data || [];
@@ -338,7 +338,7 @@ async function loadAll() {
 }
 
 function subscribeRealtime() {
-  supabase.channel('db-changes')
+  sbClient.channel('db-changes')
     .on('postgres_changes', {event:'*', schema:'public', table:'bills'}, async () => { await reload('bills'); render(); })
     .on('postgres_changes', {event:'*', schema:'public', table:'expenses'}, async () => { await reload('expenses'); render(); })
     .on('postgres_changes', {event:'*', schema:'public', table:'incomes'}, async () => { await reload('incomes'); render(); })
@@ -349,7 +349,7 @@ function subscribeRealtime() {
 }
 
 async function reload(table) {
-  const {data: rows} = await supabase.from(table).select('*').order('created_at');
+  const {data: rows} = await sbClient.from(table).select('*').order('created_at');
   data[table] = rows || [];
 }
 
@@ -707,11 +707,11 @@ async function addBill() {
   const amount=parseFloat(document.getElementById('bill-amt').value);
   const type=document.getElementById('bill-type').value;
   if(!name||isNaN(amount)||amount<=0){toast('Fill in all fields!',true);return;}
-  const {error}=await supabase.from('bills').insert({name,amount,type});
+  const {error}=await sbClient.from('bills').insert({name,amount,type});
   if(error){toast('Error saving',true);}else{toast('Bill added ✓');}
 }
 async function delBill(id) {
-  await supabase.from('bills').delete().eq('id',id);
+  await sbClient.from('bills').delete().eq('id',id);
 }
 
 async function addExpense() {
@@ -720,11 +720,11 @@ async function addExpense() {
   const paid=document.getElementById('exp-paid').value;
   const type=document.getElementById('exp-type').value;
   if(!name||isNaN(amount)||amount<=0){toast('Fill in all fields!',true);return;}
-  const {error}=await supabase.from('expenses').insert({name,amount,paid,type});
+  const {error}=await sbClient.from('expenses').insert({name,amount,paid,type});
   if(error){toast('Error saving',true);}else{toast('Expense added ✓');}
 }
 async function delExp(id) {
-  await supabase.from('expenses').delete().eq('id',id);
+  await sbClient.from('expenses').delete().eq('id',id);
 }
 
 function addBFixed() {
@@ -758,11 +758,11 @@ async function addIncome() {
   const amount=parseFloat(document.getElementById('inc-amt').value);
   const who=document.getElementById('inc-who').value;
   if(!source||isNaN(amount)||amount<=0){toast('Fill in all fields!',true);return;}
-  const {error}=await supabase.from('incomes').insert({source,amount,who});
+  const {error}=await sbClient.from('incomes').insert({source,amount,who});
   if(error){toast('Error saving',true);}else{toast('Income added ✓');}
 }
 async function delInc(id) {
-  await supabase.from('incomes').delete().eq('id',id);
+  await sbClient.from('incomes').delete().eq('id',id);
 }
 
 // ── Boot ──
