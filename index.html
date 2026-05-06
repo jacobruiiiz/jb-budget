@@ -184,7 +184,7 @@ const CONFIG_KEY = 'jb-supabase-config';
 const FIXED_KEY = 'jb-fixed-bills';
 let sbClient = null;
 let currentPage = 'overview';
-let data = { bills: [], expenses: [], incomes: [] };
+let data = { bills: [], expenses: [], incomes: [], payments: [] };
 let editingFixedId = null;
 
 const DEFAULT_HOME_FIXED = [
@@ -222,6 +222,11 @@ let bFixedNextId = Date.now();
 
 const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 document.getElementById('month-display').textContent = months[new Date().getMonth()] + ' ' + new Date().getFullYear();
+// Set today as default payment date when page loads
+function setPayDateDefault() {
+  const el = document.getElementById('pay-date');
+  if(el && !el.value) el.value = new Date().toISOString().split('T')[0];
+}
 
 function fmt(n) { return '$' + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
 function fmtSigned(n) { return (n>=0?'+':'-') + fmt(n); }
@@ -281,7 +286,17 @@ alter table expenses enable row level security;
 alter table incomes enable row level security;
 create policy "open" on bills for all using (true) with check (true);
 create policy "open" on expenses for all using (true) with check (true);
-create policy "open" on incomes for all using (true) with check (true);</div>
+create policy "open" on incomes for all using (true) with check (true);
+
+create table payments (
+  id uuid default gen_random_uuid() primary key,
+  from_who text, to_who text, amount numeric,
+  method text, note text,
+  paid_at date default current_date,
+  created_at timestamptz default now()
+);
+alter table payments enable row level security;
+create policy "open" on payments for all using (true) with check (true);</div>
       </div>
 
       <div class="setup-card">
@@ -326,15 +341,17 @@ async function initSupabase(url, key) {
 }
 
 async function loadAll() {
-  const [b, e, i] = await Promise.all([
+  const [b, e, i, p] = await Promise.all([
     sbClient.from('bills').select('*').order('created_at'),
     sbClient.from('expenses').select('*').order('created_at'),
     sbClient.from('incomes').select('*').order('created_at'),
+    sbClient.from('payments').select('*').order('paid_at', {ascending: false}),
   ]);
   if(b.error || e.error || i.error) throw new Error('load failed');
   data.bills = b.data || [];
   data.expenses = e.data || [];
   data.incomes = i.data || [];
+  data.payments = p.data || [];
 }
 
 function subscribeRealtime() {
@@ -342,6 +359,7 @@ function subscribeRealtime() {
     .on('postgres_changes', {event:'*', schema:'public', table:'bills'}, async () => { await reload('bills'); render(); })
     .on('postgres_changes', {event:'*', schema:'public', table:'expenses'}, async () => { await reload('expenses'); render(); })
     .on('postgres_changes', {event:'*', schema:'public', table:'incomes'}, async () => { await reload('incomes'); render(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'payments'}, async () => { await reload('payments'); render(); })
     .subscribe(status => {
       if(status === 'SUBSCRIBED') setStatus('live');
       else if(status === 'CHANNEL_ERROR') setStatus('error');
@@ -390,6 +408,11 @@ function calc() {
   });
   getFixed().forEach(b => { balance+=b.amount*0.4; });
   data.bills.forEach(b => { if(b.type==='shared') balance+=b.amount*0.4; });
+  // Payments reduce the balance
+  data.payments.forEach(p => {
+    if(p.from_who==='b' && p.to_who==='jacob') balance -= p.amount; // B paid Jacob → reduces what B owes
+    if(p.from_who==='jacob' && p.to_who==='b') balance += p.amount; // Jacob paid B → reduces what Jacob owes
+  });
   return {jIncome,bIncome,jOut:jBillsOwed+jExpOwed,bOut:bBillsOwed+bExpOwed,balance};
 }
 
@@ -398,6 +421,7 @@ function render() {
   const c = calc();
   const pages = {overview:renderOverview,bills:renderBills,expenses:renderExpenses,income:renderIncome,jacob:renderJacob,b:renderB,budget:renderBudget};
   document.getElementById('content').innerHTML = pages[currentPage](c);
+  setPayDateDefault();
 }
 
 function expLabel(t) {
@@ -424,6 +448,53 @@ function renderOverview(c) {
       <div class="settle-amount" style="${sColor}">${sTxt}</div>
       <div class="settle-sub">${sWho} · 60/40 split</div>
     </div>
+    <div class="section-label">Log a payment</div>
+    <div class="add-form" style="margin-bottom:14px;">
+      <div class="form-row2">
+        <div class="form-field2"><label>From</label>
+          <select id="pay-from"><option value="jacob">Jacob</option><option value="b">B</option></select>
+        </div>
+        <div class="form-field2"><label>To</label>
+          <select id="pay-to"><option value="b">B</option><option value="jacob">Jacob</option></select>
+        </div>
+      </div>
+      <div class="form-row2">
+        <div class="form-field2"><label>Amount $</label>
+          <input type="number" id="pay-amt" placeholder="0.00" inputmode="decimal"/>
+        </div>
+        <div class="form-field2"><label>Method</label>
+          <select id="pay-method">
+            <option value="Venmo">Venmo</option>
+            <option value="Cash">Cash</option>
+            <option value="Zelle">Zelle</option>
+            <option value="Apple Pay">Apple Pay</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-field2"><label>Date</label>
+        <input type="date" id="pay-date" style="color:var(--text);"/>
+      </div>
+      <div class="form-field2"><label>Note (optional)</label>
+        <input id="pay-note" placeholder="e.g. Rent split, groceries…"/>
+      </div>
+      <button class="add-btn" onclick="addPayment()">Log Payment</button>
+    </div>
+
+    <div class="section-label">Payment history</div>
+    <div class="item-list">
+      ${data.payments.length?data.payments.slice(0,10).map(p=>`
+        <div class="item">
+          <div class="item-dot shared"></div>
+          <div class="item-left">
+            <div class="item-name">${p.from_who==='jacob'?'Jacob':'B'} → ${p.to_who==='jacob'?'Jacob':'B'} · ${p.method}</div>
+            <div class="item-meta">${p.paid_at}${p.note?' · '+p.note:''}</div>
+          </div>
+          <div class="item-amount income">${fmt(p.amount)}</div>
+          <button class="item-del" onclick="delPayment('${p.id}')">✕</button>
+        </div>`).join(''):'<div class="empty-state"><div class="emoji">💸</div>No payments logged yet</div>'}
+    </div>
+
     <div class="section-label">Recent expenses</div>
     <div class="item-list">
       ${recent.length?recent.map(e=>`
@@ -702,6 +773,21 @@ function renderBudget() {
 }
 
 // ── Actions ──
+async function addPayment() {
+  const from_who = document.getElementById('pay-from').value;
+  const to_who = document.getElementById('pay-to').value;
+  const amount = parseFloat(document.getElementById('pay-amt').value);
+  const method = document.getElementById('pay-method').value;
+  const paid_at = document.getElementById('pay-date').value || new Date().toISOString().split('T')[0];
+  const note = document.getElementById('pay-note').value.trim();
+  if(from_who===to_who){toast('From and To cannot be the same!',true);return;}
+  if(isNaN(amount)||amount<=0){toast('Enter a valid amount!',true);return;}
+  const {error}=await sbClient.from('payments').insert({from_who,to_who,amount,method,note,paid_at});
+  if(error){toast('Error saving',true);}else{toast('Payment logged ✓');}
+}
+async function delPayment(id) {
+  await sbClient.from('payments').delete().eq('id',id);
+}
 async function addBill() {
   const name=document.getElementById('bill-name').value.trim();
   const amount=parseFloat(document.getElementById('bill-amt').value);
