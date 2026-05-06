@@ -187,6 +187,7 @@ let currentPage = 'overview';
 let data = { bills: [], expenses: [], incomes: [], payments: [] };
 let editingFixedId = null;
 let editingIncId = null;
+let viewMonth = new Date().toISOString().slice(0,7); // 'YYYY-MM'
 
 const DEFAULT_HOME_FIXED = [
   {id:'f1', name:'Mortgage',           amount:2184.00},
@@ -584,10 +585,31 @@ function saveFixedEdit(id, type) {
   render();
 }
 
+function prevMonth() {
+  const [y,m] = viewMonth.split('-').map(Number);
+  const d = new Date(y, m-2, 1);
+  viewMonth = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  render();
+}
+function nextMonth() {
+  const [y,m] = viewMonth.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  const now = new Date();
+  const nowStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  viewMonth = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  if(viewMonth > nowStr) viewMonth = nowStr;
+  render();
+}
 function renderExpenses(c) {
-  const all=data.expenses.slice().reverse();
+  const now = new Date();
+  const nowStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const isCurrentMonth = viewMonth === nowStr;
+  const [y,m] = viewMonth.split('-').map(Number);
+  const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][m-1] + ' ' + y;
+  const filtered = data.expenses.filter(e => (e.created_at||'').slice(0,7) === viewMonth).reverse();
+  const total = filtered.reduce((s,e)=>s+e.amount,0);
   return `
-    <div class="add-form">
+    ${isCurrentMonth ? `<div class="add-form">
       <div class="form-title">Add an expense</div>
       <div class="form-field2"><label>What was it?</label><input id="exp-name" placeholder="e.g. Harmons, Gas, Costco…"/></div>
       <div class="form-row2">
@@ -596,15 +618,22 @@ function renderExpenses(c) {
       </div>
       <div class="form-field2"><label>Category</label><select id="exp-type"><option value="groceries">Groceries (60/40)</option><option value="food">Eating out (60/40)</option><option value="shared">Other shared (60/40)</option><option value="jacob">Jacob personal</option><option value="b">Bambi personal</option></select></div>
       <button class="add-btn" onclick="addExpense()">Add Expense</button>
+    </div>` : ''}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 10px;">
+      <button onclick="prevMonth()" style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:7px 14px;color:var(--text);font-family:var(--font-body);font-size:13px;cursor:pointer;">← Prev</button>
+      <div style="text-align:center;">
+        <div style="font-size:14px;font-weight:600;color:var(--text);">${monthName}</div>
+        <div style="font-size:11px;color:var(--muted);">Total: ${fmt(total)}</div>
+      </div>
+      <button onclick="nextMonth()" style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:7px 14px;color:${isCurrentMonth?'var(--muted)':'var(--text)'};font-family:var(--font-body);font-size:13px;cursor:pointer;opacity:${isCurrentMonth?'0.4':'1'};" ${isCurrentMonth?'disabled':''}>Next →</button>
     </div>
-    <div class="section-label">All expenses</div>
     <div class="item-list">
-      ${all.length?all.map(e=>{
+      ${filtered.length?filtered.map(e=>{
         const isS=['groceries','food','shared'].includes(e.type);
         const jS=isS?e.amount*0.6:(e.type==='jacob'?+e.amount:0);
         const bS=isS?e.amount*0.4:(e.type==='b'?+e.amount:0);
-        return`<div class="item"><div class="item-dot ${isS?'shared':e.type}"></div><div class="item-left"><div class="item-name">${e.name}</div><div class="item-meta">${expLabel(e.type)} · J: ${fmt(jS)} · B: ${fmt(bS)}</div></div><span class="badge ${e.paid}">${e.paid==='jacob'?'Jacob':'Bambi'} paid</span><div class="item-amount">${fmt(e.amount)}</div><button class="item-del" onclick="delExp('${e.id}')">✕</button></div>`;
-      }).join(''):'<div class="empty-state"><div class="emoji">💸</div>No expenses yet</div>'}
+        return`<div class="item"><div class="item-dot ${isS?'shared':e.type}"></div><div class="item-left"><div class="item-name">${e.name}</div><div class="item-meta">${expLabel(e.type)} · J: ${fmt(jS)} · B: ${fmt(bS)}</div></div><span class="badge ${e.paid}">${e.paid==='jacob'?'Jacob':'Bambi'} paid</span><div class="item-amount">${fmt(e.amount)}</div>${isCurrentMonth?`<button class="item-del" onclick="delExp('${e.id}')">✕</button>`:''}</div>`;
+      }).join(''):`<div class="empty-state"><div class="emoji">💸</div>No expenses in ${monthName}</div>`}
     </div>`;
 }
 
