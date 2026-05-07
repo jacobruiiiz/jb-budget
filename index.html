@@ -280,14 +280,20 @@ function getFixed() {
   catch { return DEFAULT_HOME_FIXED; }
 }
 function getJacobFixed() {
-  try { return JSON.parse(localStorage.getItem(FIXED_KEY+'_jacob')) || DEFAULT_JACOB_FIXED; }
-  catch { return DEFAULT_JACOB_FIXED; }
+  try {
+    const arr = JSON.parse(localStorage.getItem(FIXED_KEY+'_jacob')) || DEFAULT_JACOB_FIXED;
+    const now = new Date().toISOString().slice(0,7);
+    return arr.filter(b => !b.expiresAt || b.expiresAt >= now);
+  } catch { return DEFAULT_JACOB_FIXED; }
 }
 function saveFixed(arr) { localStorage.setItem(FIXED_KEY, JSON.stringify(arr)); }
 function saveJacobFixed(arr) { localStorage.setItem(FIXED_KEY+'_jacob', JSON.stringify(arr)); }
 function getBFixed() {
-  try { return JSON.parse(localStorage.getItem(FIXED_KEY+'_b')) || []; }
-  catch { return []; }
+  try {
+    const arr = JSON.parse(localStorage.getItem(FIXED_KEY+'_b')) || [];
+    const now = new Date().toISOString().slice(0,7);
+    return arr.filter(b => !b.expiresAt || b.expiresAt >= now);
+  } catch { return []; }
 }
 function saveBFixed(arr) { localStorage.setItem(FIXED_KEY+'_b', JSON.stringify(arr)); }
 let bFixedNextId = Date.now();
@@ -901,22 +907,29 @@ function editRow(b, type, saveFn) {
     <div class="item-dot ${type}"></div>
     <div class="item-left">
       <div class="item-name">${b.name}</div>
-      <div class="item-meta">${type==='shared'?`60% share: ${fmt(b.amount*0.6)}`:type==='jacob'?'Jacob only':'B only'}</div>
+      <div class="item-meta">${type==='shared'?`60% share: ${fmt(b.amount*0.6)}`:type==='jacob'?'Jacob only':'B only'}${b.expiresAt?' · expires '+b.expiresAt:' · permanent'}</div>
     </div>
     <div class="item-amount">${type==='shared'?fmt(b.amount*0.6):fmt(b.amount)}</div>
     <button class="item-del" onclick="startFixedEdit('${b.id}')" title="Edit" style="font-size:14px;">✎</button>
   </div>`;
 }
 
-function summaryCard(label, fixedBills, homeShare, income, spentThisMonth) {
+function summaryCard(label, fixedBills, homeShare, income, personalSpend, soloFood, sharedGroceries, sharedEatingOut) {
   const totalFixedOut = fixedBills + homeShare;
-  const leftToSpend = income - totalFixedOut - (spentThisMonth || 0);
-  const spentPct = income > 0 ? Math.min(100, Math.round(((totalFixedOut + (spentThisMonth||0)) / income) * 100)) : 0;
+  const totalSpent = (personalSpend||0) + (soloFood||0) + (sharedGroceries||0) + (sharedEatingOut||0);
+  const totalUsed = totalFixedOut + totalSpent;
+  const leftToSpend = income - totalUsed;
+  const spentPct = income > 0 ? Math.min(100, Math.round((totalUsed / income) * 100)) : 0;
   const barColor = spentPct >= 100 ? 'var(--red)' : spentPct >= 80 ? '#f59e0b' : 'var(--green)';
+  function statBox(lbl, val) {
+    return `<div style="background:rgba(255,255,255,0.4);border-radius:10px;padding:9px 6px;text-align:center;">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.3px;line-height:1.3;">${lbl}</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text);">${fmt(val)}</div>
+    </div>`;
+  }
   return `
     <div style="background:linear-gradient(145deg,#ede9f8,#e0d8f5);border-radius:var(--radius);padding:20px;margin-bottom:16px;border:1px solid var(--border2);">
       <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;">${label}</div>
-      
       <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;">
         <div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">Monthly income</div>
@@ -924,38 +937,29 @@ function summaryCard(label, fixedBills, homeShare, income, spentThisMonth) {
         </div>
         <div style="text-align:right;">
           <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">Used so far</div>
-          <div style="font-size:20px;font-weight:600;color:var(--red);">${fmt(totalFixedOut + (spentThisMonth||0))}</div>
+          <div style="font-size:20px;font-weight:600;color:var(--red);">${fmt(totalUsed)}</div>
         </div>
       </div>
-
       <div style="background:rgba(255,255,255,0.4);border-radius:999px;height:10px;margin-bottom:10px;overflow:hidden;">
         <div style="height:100%;border-radius:999px;background:${barColor};width:${spentPct}%;transition:width 0.4s;"></div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:14px;">
         <span>Bills: ${fmt(totalFixedOut)}</span>
-        <span>Spending: ${fmt(spentThisMonth||0)}</span>
+        <span>Spending: ${fmt(totalSpent)}</span>
         <span>${spentPct}% used</span>
       </div>
-
-      <div style="background:rgba(255,255,255,0.6);border-radius:var(--radius-sm);padding:14px;text-align:center;">
+      <div style="background:rgba(255,255,255,0.6);border-radius:var(--radius-sm);padding:14px;text-align:center;margin-bottom:12px;">
         <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Left to spend</div>
         <div style="font-family:var(--font-display);font-size:36px;letter-spacing:-1px;color:${leftToSpend>=0?'var(--green)':'var(--red)'};">${leftToSpend<0?'-':''}${fmt(leftToSpend)}</div>
         ${income===0?'<div style="font-size:11px;color:var(--muted);margin-top:4px;">Add income in the Income tab</div>':''}
       </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px;">
-        <div style="background:rgba(255,255,255,0.4);border-radius:10px;padding:9px 8px;text-align:center;">
-          <div style="font-size:10px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.3px;">Personal bills</div>
-          <div style="font-size:14px;font-weight:600;color:var(--text);">${fmt(fixedBills)}</div>
-        </div>
-        <div style="background:rgba(255,255,255,0.4);border-radius:10px;padding:9px 8px;text-align:center;">
-          <div style="font-size:10px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.3px;">Home share</div>
-          <div style="font-size:14px;font-weight:600;color:var(--text);">${fmt(homeShare)}</div>
-        </div>
-        <div style="background:rgba(255,255,255,0.4);border-radius:10px;padding:9px 8px;text-align:center;">
-          <div style="font-size:10px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.3px;">Spending</div>
-          <div style="font-size:14px;font-weight:600;color:var(--text);">${fmt(spentThisMonth||0)}</div>
-        </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+        ${statBox('Personal Bills', fixedBills)}
+        ${statBox('Home Share', homeShare)}
+        ${statBox('Personal Spend', personalSpend||0)}
+        ${statBox('Solo Eating Out', soloFood||0)}
+        ${statBox('Shared Groceries', sharedGroceries||0)}
+        ${statBox('Shared Eating Out', sharedEatingOut||0)}
       </div>
     </div>`;
 }
@@ -976,7 +980,6 @@ function renderJacob(c) {
   const jacobSharedGroceries = thisMonthExp.filter(e=>e.type==='groceries').reduce((s,e)=>s+e.amount*0.6,0);
   const jacobSoloFood = thisMonthExp.filter(e=>e.type==='jacob_food').reduce((s,e)=>s+e.amount,0);
   const jacobOtherPersonal = thisMonthExp.filter(e=>e.type==='jacob').reduce((s,e)=>s+e.amount,0);
-  const jacobPersonalSpent = jacobSoloFood + jacobOtherPersonal;
 
   function catRow(emoji, label, amount, sub) {
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid var(--border);">
@@ -986,7 +989,8 @@ function renderJacob(c) {
   }
 
   return `
-    ${summaryCard("Jacob's summary", jacobPersonal, homeShare, jacobIncome, jacobPersonalSpent)}
+    ${summaryCard("Jacob's summary", jacobPersonal, homeShare, jacobIncome, jacobOtherPersonal, jacobSoloFood, jacobSharedGroceries, jacobSharedFood)}
+
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
       <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px;">Shared costs · your 60%</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">${monthName}</div>
@@ -998,6 +1002,7 @@ function renderJacob(c) {
         <div style="font-size:14px;font-weight:700;color:var(--accent2);">${fmt(jacobSharedHome+jacobSharedFood+jacobSharedGroceries)}</div>
       </div>
     </div>
+
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
       <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px;">Personal costs</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">${monthName}</div>
@@ -1009,8 +1014,29 @@ function renderJacob(c) {
         <div style="font-size:14px;font-weight:700;color:var(--accent2);">${fmt(jacobPersonal+jacobSoloFood+jacobOtherPersonal)}</div>
       </div>
     </div>
+
     <hr class="section-divider">
-    <div class="section-label">Personal fixed bills · ${fmt(jacobPersonal)}/mo</div>
+    <div class="section-label">Jacob's personal fixed bills · ${fmt(jacobPersonal)}/mo</div>
+    <div class="add-form" style="margin-bottom:10px;">
+      <div class="form-title">Add a personal bill</div>
+      <div class="form-field2"><label>Bill name</label><input id="jfix-name" placeholder="e.g. Gym, Subscription…"/></div>
+      <div class="form-field2"><label>Monthly $</label><input type="number" id="jfix-amt" placeholder="0.00" inputmode="decimal"/></div>
+      <div class="form-field2"><label>Duration</label>
+        <select id="jfix-months">
+          <option value="0">Permanent</option>
+          <option value="1">1 month</option>
+          <option value="2">2 months</option>
+          <option value="3">3 months</option>
+          <option value="4">4 months</option>
+          <option value="5">5 months</option>
+          <option value="6">6 months</option>
+          <option value="12">12 months</option>
+          <option value="18">18 months</option>
+          <option value="24">24 months</option>
+        </select>
+      </div>
+      <button class="add-btn" onclick="addJacobFixed()">Add Bill</button>
+    </div>
     <div class="item-list">${jacobFixed.map(b=>editRow(b,'jacob','saveFixedEdit')).join('')}</div>
     <hr class="section-divider">
     <div class="section-label">Home bills — 60% share · ${fmt(homeShare)}/mo</div>
@@ -1054,7 +1080,6 @@ function renderB(c) {
   const bSharedGroceries = thisMonthExp.filter(e=>e.type==='groceries').reduce((s,e)=>s+e.amount*0.4,0);
   const bSoloFood = thisMonthExp.filter(e=>e.type==='b_food').reduce((s,e)=>s+e.amount,0);
   const bOtherPersonal = thisMonthExp.filter(e=>e.type==='b').reduce((s,e)=>s+e.amount,0);
-  const bPersonalSpent = bSoloFood + bOtherPersonal;
 
   function bCatRow(emoji, label, amount, sub) {
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid var(--border);">
@@ -1064,7 +1089,8 @@ function renderB(c) {
   }
 
   return `
-    ${summaryCard("B's summary", bPersonal, homeShare, bIncome, bPersonalSpent)}
+    ${summaryCard("B's summary", bPersonal, homeShare, bIncome, bOtherPersonal, bSoloFood, bSharedGroceries, bSharedFood)}
+
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
       <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px;">Shared costs · your 40%</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">${monthName}</div>
@@ -1076,6 +1102,7 @@ function renderB(c) {
         <div style="font-size:14px;font-weight:700;color:var(--accent2);">${fmt(bSharedHome+bSharedFood+bSharedGroceries)}</div>
       </div>
     </div>
+
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
       <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px;">Personal costs</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">${monthName}</div>
@@ -1087,12 +1114,27 @@ function renderB(c) {
         <div style="font-size:14px;font-weight:700;color:var(--accent2);">${fmt(bPersonal+bSoloFood+bOtherPersonal)}</div>
       </div>
     </div>
+
     <hr class="section-divider">
     <div class="section-label">B's personal fixed bills · ${fmt(bPersonal)}/mo</div>
     <div class="add-form" style="margin-bottom:10px;">
       <div class="form-title">Add a personal bill</div>
       <div class="form-field2"><label>Bill name</label><input id="bfix-name" placeholder="e.g. Car, Student loan…"/></div>
       <div class="form-field2"><label>Monthly $</label><input type="number" id="bfix-amt" placeholder="0.00" inputmode="decimal"/></div>
+      <div class="form-field2"><label>Duration</label>
+        <select id="bfix-months">
+          <option value="0">Permanent</option>
+          <option value="1">1 month</option>
+          <option value="2">2 months</option>
+          <option value="3">3 months</option>
+          <option value="4">4 months</option>
+          <option value="5">5 months</option>
+          <option value="6">6 months</option>
+          <option value="12">12 months</option>
+          <option value="18">18 months</option>
+          <option value="24">24 months</option>
+        </select>
+      </div>
       <button class="add-btn" onclick="addBFixed()">Add Bill</button>
     </div>
     <div class="item-list">
@@ -1329,12 +1371,39 @@ async function delExp(id) {
   await sbClient.from('expenses').delete().eq('id',id);
 }
 
+function addJacobFixed() {
+  const name = document.getElementById('jfix-name').value.trim();
+  const amount = parseFloat(document.getElementById('jfix-amt').value);
+  const months = parseInt(document.getElementById('jfix-months').value);
+  if(!name||isNaN(amount)||amount<=0){toast('Fill in all fields!',true);return;}
+  const arr = getJacobFixed();
+  const bill = {id:'j'+Date.now(), name, amount};
+  if(months > 0) {
+    const expiry = new Date();
+    expiry.setMonth(expiry.getMonth() + months);
+    bill.expiresAt = expiry.toISOString().slice(0,7);
+    bill.expiryLabel = months + ' month' + (months>1?'s':'');
+  }
+  arr.push(bill);
+  saveJacobFixed(arr);
+  toast('Bill added ✓');
+  render();
+}
+
 function addBFixed() {
   const name = document.getElementById('bfix-name').value.trim();
   const amount = parseFloat(document.getElementById('bfix-amt').value);
+  const months = parseInt(document.getElementById('bfix-months').value);
   if(!name||isNaN(amount)||amount<=0){toast('Fill in all fields!',true);return;}
   const arr = getBFixed();
-  arr.push({id:'b'+Date.now(), name, amount});
+  const bill = {id:'b'+Date.now(), name, amount};
+  if(months > 0) {
+    const expiry = new Date();
+    expiry.setMonth(expiry.getMonth() + months);
+    bill.expiresAt = expiry.toISOString().slice(0,7);
+    bill.expiryLabel = months + ' month' + (months>1?'s':'');
+  }
+  arr.push(bill);
   saveBFixed(arr);
   toast('Bill added ✓');
   render();
