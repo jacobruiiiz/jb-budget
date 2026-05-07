@@ -52,6 +52,26 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .nav-btn svg { width: 22px; height: 22px; }
 .nav-btn span { font-size: 10px; font-weight: 500; letter-spacing: 0.3px; }
 
+/* Budget */
+.budget-header { background: linear-gradient(135deg, var(--surface2) 0%, #e4dcf5 100%); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 14px; }
+.budget-available { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.budget-avail-card { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius-sm); padding: 12px 14px; }
+.budget-avail-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.budget-avail-val { font-size: 20px; font-weight: 600; font-family: var(--font-display); }
+.progress-bar-wrap { background: var(--bg); border-radius: 999px; height: 8px; margin: 6px 0 4px; overflow: hidden; }
+.progress-bar { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.prog-green { background: var(--green); }
+.prog-amber { background: #f59e0b; }
+.prog-red { background: var(--red); }
+.budget-cat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 8px; }
+.budget-cat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.budget-cat-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.budget-cat-amounts { font-size: 12px; color: var(--muted); }
+.budget-cat-amounts span { font-weight: 600; color: var(--text); }
+.budget-edit-row { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+.budget-edit-row input { flex: 1; background: var(--bg); border: 1px solid var(--border2); border-radius: 8px; padding: 6px 10px; color: var(--text); font-family: var(--font-body); font-size: 13px; outline: none; }
+.budget-edit-btn { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 14px; padding: 2px 6px; }
+
 /* Scanner */
 .scan-btn { width:100%; background:var(--surface); border:1.5px dashed var(--border2); border-radius:var(--radius); padding:16px; color:var(--accent2); font-family:var(--font-body); font-size:14px; font-weight:500; cursor:pointer; margin-bottom:10px; display:flex; align-items:center; justify-content:center; gap:8px; transition:all 0.2s; }
 .scan-btn:active { background:var(--surface2); }
@@ -200,6 +220,19 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 // ── Config (user fills these in) ──
 const CONFIG_KEY = 'jb-supabase-config';
 const ANTHROPIC_KEY = 'jb-anthropic-key';
+const BUDGET_KEY = 'jb-budget-limits';
+const DEFAULT_BUDGET = [
+  {id:'bg1', name:'Groceries',   category:'groceries', limit:600},
+  {id:'bg2', name:'Eating out',  category:'food',      limit:300},
+  {id:'bg3', name:'Other shared',category:'shared',    limit:200},
+  {id:'bg4', name:'Jacob personal', category:'jacob',  limit:200},
+  {id:'bg5', name:'B personal',  category:'b',         limit:200},
+];
+function getBudget() {
+  try { return JSON.parse(localStorage.getItem(BUDGET_KEY)) || DEFAULT_BUDGET; }
+  catch { return DEFAULT_BUDGET; }
+}
+function saveBudget(arr) { localStorage.setItem(BUDGET_KEY, JSON.stringify(arr)); }
 const FIXED_KEY = 'jb-fixed-bills';
 let sbClient = null;
 let currentPage = 'overview';
@@ -850,25 +883,30 @@ function editRow(b, type, saveFn) {
   </div>`;
 }
 
-function summaryCard(label, personal, homeShare, income) {
-  const totalOut = personal + homeShare;
-  const net = income - totalOut;
+function summaryCard(label, fixedBills, homeShare, income, spentThisMonth) {
+  const totalFixedOut = fixedBills + homeShare;
+  const net = income - totalFixedOut;
+  const leftToSpend = net - (spentThisMonth || 0);
   return `
     <div class="settle-box" style="text-align:left;padding:18px 20px;margin-bottom:14px;">
       <div class="settle-label">${label}</div>
-      ${income>0?`<div style="font-size:12px;color:var(--green);font-weight:600;margin-bottom:6px;">Income: ${fmt(income)}/mo</div>`:''}
-      <div class="settle-amount" style="color:var(--accent2);font-size:28px;">${fmt(totalOut)}<span style="font-size:14px;color:var(--muted);font-weight:400;font-family:var(--font-body);"> /mo out</span></div>
-      ${income>0?`<div style="font-size:13px;margin-top:6px;font-weight:600;color:${net>=0?'var(--green)':'var(--red)'};">Net: ${fmtSigned(net)}/mo</div>`:''}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
+      ${income>0?`<div style="font-size:12px;color:var(--green);font-weight:600;margin-bottom:8px;">💰 Income: ${fmt(income)}/mo</div>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div style="background:var(--bg);border-radius:10px;padding:10px 12px;">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">Personal bills</div>
-          <div style="font-size:17px;font-weight:600;color:var(--text);">${fmt(personal)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Fixed bills</div>
+          <div style="font-size:16px;font-weight:600;color:var(--red);">−${fmt(totalFixedOut)}</div>
         </div>
         <div style="background:var(--bg);border-radius:10px;padding:10px 12px;">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">Home share</div>
-          <div style="font-size:17px;font-weight:600;color:var(--text);">${fmt(homeShare)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Spent this month</div>
+          <div style="font-size:16px;font-weight:600;color:var(--red);">−${fmt(spentThisMonth||0)}</div>
         </div>
       </div>
+      ${income>0?`
+      <div style="border-top:1px solid var(--border2);padding-top:12px;">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Left to spend this month</div>
+        <div style="font-family:var(--font-display);font-size:32px;letter-spacing:-0.5px;color:${leftToSpend>=0?'var(--green)':'var(--red)'};">${leftToSpend>=0?'':'-'}${fmt(leftToSpend)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">After bills (${fmt(totalFixedOut)}) + spending (${fmt(spentThisMonth||0)})</div>
+      </div>` : '<div style="font-size:12px;color:var(--muted);">Add income in the Income tab to see what you have left to spend</div>'}
     </div>`;
 }
 
@@ -878,8 +916,32 @@ function renderJacob(c) {
   const jacobPersonal = jacobFixed.reduce((s,b)=>s+b.amount,0);
   const homeShare = homeFixed.reduce((s,b)=>s+b.amount,0)*0.6;
   const jacobIncome = data.incomes.filter(i=>i.who==='jacob').reduce((s,i)=>s+(+i.amount),0);
+  const now = new Date();
+  const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][now.getMonth()] + ' ' + now.getFullYear();
+  const jacobExp = data.expenses.filter(e => {
+    const d = (e.expense_date||e.created_at||'').slice(0,7);
+    return d === thisMonth && (e.type==='jacob' || ['groceries','food','shared'].includes(e.type));
+  });
+  const jacobExpTotal = jacobExp.reduce((s,e) => {
+    const isS = ['groceries','food','shared'].includes(e.type);
+    return s + (isS ? e.amount*0.6 : e.amount);
+  }, 0);
   return `
-    ${summaryCard("Jacob's summary", jacobPersonal, homeShare, jacobIncome)}
+    ${summaryCard("Jacob's summary", jacobPersonal + jacobExpTotal, homeShare, jacobIncome)}
+    <div class="section-label">This month's expenses · ${monthName} · ${fmt(jacobExpTotal)}</div>
+    <div class="item-list">
+      ${jacobExp.length ? jacobExp.slice().reverse().map(e => {
+        const isS = ['groceries','food','shared'].includes(e.type);
+        const myAmt = isS ? e.amount*0.6 : e.amount;
+        return `<div class="item">
+          <div class="item-dot ${isS?'shared':'jacob'}"></div>
+          <div class="item-left"><div class="item-name">${e.name}</div><div class="item-meta">${e.expense_date||e.created_at?.slice(0,10)||''} · ${expLabel(e.type)}</div></div>
+          <div class="item-amount">${fmt(myAmt)}</div>
+        </div>`;
+      }).join('') : '<div class="empty-state"><div class="emoji">🧾</div>No expenses this month</div>'}
+    </div>
+    <hr class="section-divider">
     <div class="section-label">Personal fixed bills · ${fmt(jacobPersonal)}/mo</div>
     <div class="item-list">${jacobFixed.map(b=>editRow(b,'jacob','saveFixedEdit')).join('')}</div>
     <hr class="section-divider">
@@ -893,6 +955,7 @@ function renderJacob(c) {
           <div class="item-dot jacob"></div>
           <div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">Monthly</div></div>
           <div class="item-amount income">${fmt(i.amount)}</div>
+          <button class="item-del" onclick="startIncEdit('${i.id}')" style="font-size:14px;">✎</button>
           <button class="item-del" onclick="delInc('${i.id}')">✕</button>
         </div>`).join('') || '<div class="empty-state"><div class="emoji">💰</div>Add income in the Income tab</div>'}
     </div>`;
@@ -905,7 +968,7 @@ function renderB(c) {
   const homeShare = homeFixed.reduce((s,b)=>s+b.amount,0)*0.4;
   const bIncome = data.incomes.filter(i=>i.who==='b').reduce((s,i)=>s+(+i.amount),0);
   return `
-    ${summaryCard("B's summary", bPersonal, homeShare, bIncome)}
+    ${summaryCard("B's summary", bPersonal, homeShare, bIncome, bExpTotal)}
     <div class="section-label">B's personal fixed bills · ${fmt(bPersonal)}/mo</div>
     <div class="add-form" style="margin-bottom:10px;">
       <div class="form-title">Add a personal bill</div>
@@ -936,44 +999,86 @@ function renderBudget() {
   const homeFixed = getFixed();
   const jacobFixed = getJacobFixed();
   const bFixed = getBFixed();
+  const budgets = getBudget();
   const homeTotal = homeFixed.reduce((s,b)=>s+b.amount,0);
   const jacobPersonal = jacobFixed.reduce((s,b)=>s+b.amount,0);
   const bPersonal = bFixed.reduce((s,b)=>s+b.amount,0);
   const jacobIncome = data.incomes.filter(i=>i.who==='jacob').reduce((s,i)=>s+(+i.amount),0);
   const bIncome = data.incomes.filter(i=>i.who==='b').reduce((s,i)=>s+(+i.amount),0);
   const totalIncome = jacobIncome + bIncome;
-  const totalFixed = homeTotal + jacobPersonal + bPersonal;
-  const remaining = totalIncome - totalFixed;
-  return `
-    <div class="settle-box" style="text-align:left;padding:18px 20px;margin-bottom:14px;">
-      <div class="settle-label">Combined monthly picture</div>
-      <div class="settle-amount" style="color:var(--accent2);font-size:28px;">${fmt(totalIncome)}<span style="font-size:14px;color:var(--muted);font-weight:400;font-family:var(--font-body);"> total income</span></div>
-      ${totalIncome>0?`<div style="font-size:13px;margin-top:6px;font-weight:600;color:${remaining>=0?'var(--green)':'var(--red)'};">After fixed bills: ${fmtSigned(remaining)}/mo</div>`:'<div style="font-size:12px;color:var(--muted);margin-top:6px;">Add income in the Income tab to see your full picture</div>'}
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px;">
-        <div style="background:var(--bg);border-radius:10px;padding:10px 10px;">
-          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Home bills</div>
-          <div style="font-size:15px;font-weight:600;color:var(--text);">${fmt(homeTotal)}</div>
-        </div>
-        <div style="background:var(--bg);border-radius:10px;padding:10px 10px;">
-          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Jacob bills</div>
-          <div style="font-size:15px;font-weight:600;color:var(--text);">${fmt(jacobPersonal)}</div>
-        </div>
-        <div style="background:var(--bg);border-radius:10px;padding:10px 10px;">
-          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">B bills</div>
-          <div style="font-size:15px;font-weight:600;color:var(--text);">${fmt(bPersonal)}</div>
-        </div>
+  const jacobFixedTotal = jacobPersonal + homeTotal*0.6;
+  const bFixedTotal = bPersonal + homeTotal*0.4;
+  const jacobAvail = jacobIncome - jacobFixedTotal;
+  const bAvail = bIncome - bFixedTotal;
+  const combinedAvail = totalIncome - jacobFixedTotal - bFixedTotal;
+
+  // This month's spending per category
+  const now = new Date();
+  const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][now.getMonth()];
+  const thisMonthExp = data.expenses.filter(e => ((e.expense_date||e.created_at||'').slice(0,7)) === thisMonth);
+
+  function spentForCat(cat) {
+    return thisMonthExp.filter(e=>e.type===cat).reduce((s,e)=>s+e.amount,0);
+  }
+
+  function progressBar(spent, limit) {
+    const pct = Math.min(100, limit>0 ? (spent/limit*100) : 0);
+    const cls = pct >= 100 ? 'prog-red' : pct >= 75 ? 'prog-amber' : 'prog-green';
+    return `<div class="progress-bar-wrap"><div class="progress-bar ${cls}" style="width:${pct}%"></div></div>`;
+  }
+
+  const budgetRows = budgets.map(bg => {
+    const spent = spentForCat(bg.category);
+    const left = bg.limit - spent;
+    const pct = bg.limit>0 ? Math.min(100, Math.round(spent/bg.limit*100)) : 0;
+    return `<div class="budget-cat">
+      <div class="budget-cat-header">
+        <div class="budget-cat-name">${bg.name}</div>
+        <div class="budget-cat-amounts"><span>${fmt(spent)}</span> of ${fmt(bg.limit)} · ${left>=0?'<span style="color:var(--green)">'+fmt(left)+' left</span>':'<span style="color:var(--red)">'+fmt(Math.abs(left))+' over</span>'}</div>
       </div>
-    </div>
-    <div class="section-label">Budget categories</div>
-    <div class="item" style="flex-direction:column;align-items:flex-start;gap:6px;padding:16px;">
-      <div style="font-size:13px;color:var(--muted);line-height:1.7;">
-        This tab is ready for your budgeting goals. Come back to Claude whenever you're ready to add:<br><br>
-        · Monthly spending limits per category<br>
-        · Savings goals (vacation, emergency fund, etc.)<br>
-        · Debt payoff tracker<br>
-        · Any other budgeting features you want
+      ${progressBar(spent, bg.limit)}
+      <div style="font-size:11px;color:var(--muted);">${pct}% used</div>
+      <div class="budget-edit-row">
+        <input type="number" id="blimit-${bg.id}" value="${bg.limit}" inputmode="decimal" placeholder="Monthly limit $"/>
+        <button class="budget-edit-btn" onclick="saveBudgetLimit('${bg.id}')" style="background:var(--accent);color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;">Save</button>
       </div>
     </div>`;
+  }).join('');
+
+  return `
+    <div class="budget-header">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;">${monthName} budget</div>
+      <div style="font-family:var(--font-display);font-size:30px;letter-spacing:-0.5px;color:var(--accent2);">${fmt(combinedAvail)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px;">combined available after all fixed bills</div>
+    </div>
+    <div class="budget-available">
+      <div class="budget-avail-card">
+        <div class="budget-avail-label">Jacob available</div>
+        <div class="budget-avail-val" style="color:${jacobAvail>=0?'var(--green)':'var(--red)'};">${fmt(jacobAvail)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;">${fmt(jacobIncome)} income − ${fmt(jacobFixedTotal)} bills</div>
+      </div>
+      <div class="budget-avail-card">
+        <div class="budget-avail-label">B available</div>
+        <div class="budget-avail-val" style="color:${bAvail>=0?'var(--green)':'var(--red)'};">${fmt(bAvail)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;">${fmt(bIncome)} income − ${fmt(bFixedTotal)} bills</div>
+      </div>
+    </div>
+    <div class="section-label">Spending categories · ${monthName} — tap to update limits</div>
+    ${budgetRows}
+  `;
+}
+
+function saveBudgetLimit(id) {
+  const el = document.getElementById('blimit-'+id);
+  const limit = parseFloat(el.value);
+  if(isNaN(limit)||limit<0){toast('Enter a valid amount',true);return;}
+  const arr = getBudget();
+  const idx = arr.findIndex(b=>b.id===id);
+  if(idx>-1) arr[idx].limit = limit;
+  saveBudget(arr);
+  toast('Budget updated ✓');
+  render();
 }
 
 // ── Actions ──
