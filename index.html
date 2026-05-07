@@ -994,6 +994,21 @@ function renderExpCats(filtered, isCurrentMonth) {
       +'</div>';
   }).join('');
 }
+
+(async () => {
+  const saved = localStorage.getItem(CONFIG_KEY);
+  if(saved) {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div>Connecting…</div>';
+    try {
+      const {url,key} = JSON.parse(saved);
+      await initSupabase(url,key);
+    } catch(e) { showSetup(); }
+  } else {
+    showSetup();
+  }
+})();
+
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
 </html>
