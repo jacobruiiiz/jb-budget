@@ -1011,4 +1011,215 @@ function renderExpCats(filtered, isCurrentMonth) {
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
-</html>
+</html>function renderIncome(c) {
+  const jI=data.incomes.filter(i=>i.who==='jacob'), bI=data.incomes.filter(i=>i.who==='b');
+  const totalIncome = c.jIncome + c.bIncome;
+  function incEditRow(i, who) {
+    if(editingIncId===i.id) return '<div class="item" style="flex-wrap:wrap;gap:8px;">'
+      +'<div class="item-dot '+who+'"></div>'
+      +'<div class="item-left"><input id="iedit-src-'+i.id+'" value="'+i.source+'" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/></div>'
+      +'<input id="iedit-amt-'+i.id+'" type="number" value="'+i.amount+'" inputmode="decimal" style="width:90px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/>'
+      +'<button onclick="saveIncEdit(''+i.id+'')" style="background:var(--accent);border:none;border-radius:8px;padding:6px 14px;color:white;font-family:var(--font-body);font-size:12px;font-weight:600;cursor:pointer;">Save</button>'
+      +'<button onclick="cancelIncEdit()" style="background:none;border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--muted);font-family:var(--font-body);font-size:12px;cursor:pointer;">Cancel</button>'
+      +'</div>';
+    return '<div class="item">'
+      +'<div class="item-dot '+who+'"></div>'
+      +'<div class="item-left"><div class="item-name">'+i.source+'</div><div class="item-meta">'+(who==='jacob'?'Jacob':'B')+' · monthly</div></div>'
+      +'<div class="item-amount income">'+fmt(i.amount)+'</div>'
+      +'<button class="item-del" onclick="startIncEdit(''+i.id+'')" style="font-size:14px;">✎</button>'
+      +'<button class="item-del" onclick="delInc(''+i.id+'')">✕</button>'
+      +'</div>';
+  }
+  return '<div style="background:linear-gradient(145deg,#ede9f8,#e0d8f5);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px;border:1px solid var(--border2);">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Combined income</div>'
+    +'<div style="font-family:var(--font-display);font-size:34px;color:var(--green);letter-spacing:-0.5px;margin-bottom:10px;">'+fmt(totalIncome)+'<span style="font-size:14px;font-weight:400;font-family:var(--font-body);color:var(--muted);"> /mo</span></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    +'<div style="background:rgba(255,255,255,0.5);border-radius:10px;padding:10px 12px;"><div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Jacob</div><div style="font-size:18px;font-weight:600;color:var(--text);">'+fmt(c.jIncome)+'</div></div>'
+    +'<div style="background:rgba(255,255,255,0.5);border-radius:10px;padding:10px 12px;"><div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">B</div><div style="font-size:18px;font-weight:600;color:var(--text);">'+fmt(c.bIncome)+'</div></div>'
+    +'</div></div>'
+    +'<div class="section-label">Jacob · '+fmt(c.jIncome)+'/mo</div>'
+    +'<div class="item-list">'+(jI.length?jI.map(i=>incEditRow(i,'jacob')).join(''):'<div class="empty-state"><div class="emoji">💰</div>None yet</div>')+'</div>'
+    +'<hr class="section-divider">'
+    +'<div class="section-label">B · '+fmt(c.bIncome)+'/mo</div>'
+    +'<div class="item-list">'+(bI.length?bI.map(i=>incEditRow(i,'b')).join(''):'<div class="empty-state"><div class="emoji">💰</div>None yet</div>')+'</div>'
+    +'<hr class="section-divider">'
+    +'<div class="add-form" style="margin-top:4px;">'
+    +'<div class="form-title">Add income</div>'
+    +'<div class="form-field2"><label>Source</label><input id="inc-src" placeholder="e.g. Salary, ESPP, 401k…"/></div>'
+    +'<div class="form-row2">'
+    +'<div class="form-field2"><label>Monthly $</label><input type="number" id="inc-amt" placeholder="0.00" inputmode="decimal"/></div>'
+    +'<div class="form-field2"><label>Whose?</label><select id="inc-who"><option value="jacob">Jacob</option><option value="b">B</option></select></div>'
+    +'</div>'
+    +'<button class="add-btn" onclick="addIncome()">Add Income</button>'
+    +'</div>';
+}
+
+function renderBudget() {
+  const homeFixed = getFixed();
+  const jacobFixed = getJacobFixed();
+  const bFixed = getBFixed();
+  const budgets = getBudget();
+  const debts = getDebts();
+  const homeTotal = homeFixed.reduce((s,b)=>s+b.amount,0);
+  const jacobPersonal = jacobFixed.reduce((s,b)=>s+b.amount,0);
+  const bPersonal = bFixed.reduce((s,b)=>s+b.amount,0);
+  const jacobIncome = data.incomes.filter(i=>i.who==='jacob').reduce((s,i)=>s+(+i.amount),0);
+  const bIncome = data.incomes.filter(i=>i.who==='b').reduce((s,i)=>s+(+i.amount),0);
+  const totalIncome = jacobIncome + bIncome;
+  const jacobFixedTotal = jacobPersonal + homeTotal*0.6;
+  const bFixedTotal = bPersonal + homeTotal*0.4;
+  const now = new Date();
+  const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][now.getMonth()];
+  const thisMonthExp = data.expenses.filter(e => ((e.expense_date||e.created_at||'').slice(0,7)) === thisMonth);
+  const jacobPersonalSpent = thisMonthExp.filter(e=>e.type==='jacob').reduce((s,e)=>s+e.amount,0);
+  const jacobSoloFood = thisMonthExp.filter(e=>e.type==='jacob_food').reduce((s,e)=>s+e.amount,0);
+  const bPersonalSpent = thisMonthExp.filter(e=>e.type==='b').reduce((s,e)=>s+e.amount,0);
+  const bSoloFood = thisMonthExp.filter(e=>e.type==='b_food').reduce((s,e)=>s+e.amount,0);
+  const jacobAvail = jacobIncome - jacobFixedTotal - jacobPersonalSpent - jacobSoloFood;
+  const bAvail = bIncome - bFixedTotal - bPersonalSpent - bSoloFood;
+  const combinedAvail = jacobAvail + bAvail;
+  const totalDebt = debts.reduce((s,d)=>s+(+d.balance),0);
+  const totalMinPayment = debts.reduce((s,d)=>s+(+d.minPayment),0);
+
+  function spentForCat(cat) {
+    return thisMonthExp.filter(e=>e.type===cat).reduce((s,e)=>s+e.amount,0);
+  }
+  function progressBar(spent, limit) {
+    const pct = Math.min(100, limit>0 ? (spent/limit*100) : 0);
+    const cls = pct >= 100 ? 'prog-red' : pct >= 75 ? 'prog-amber' : 'prog-green';
+    return '<div class="progress-bar-wrap"><div class="progress-bar '+cls+'" style="width:'+pct+'%"></div></div>';
+  }
+  function debtRow(d) {
+    const paidPct = d.original>0 ? Math.min(100, Math.round((1 - d.balance/d.original)*100)) : 0;
+    return '<div class="debt-card">'
+      +'<div class="debt-header"><div class="debt-name">'+d.name+'</div><div class="debt-balance">'+fmt(d.balance)+'</div></div>'
+      +'<div class="debt-meta">Min payment: '+fmt(d.minPayment)+'/mo · '+paidPct+'% paid off</div>'
+      +'<div class="debt-progress">'+progressBar(d.original - d.balance, d.original)+'</div>'
+      +'<div class="debt-actions">'
+      +'<input type="number" id="dpay-'+d.id+'" placeholder="Payment amount $" inputmode="decimal"/>'
+      +'<button onclick="makeDebtPayment(''+d.id+'')">Log Payment</button>'
+      +'<button class="ghost" onclick="deleteDebt(''+d.id+'')">✕</button>'
+      +'</div></div>';
+  }
+
+  const budgetRows = budgets.map(bg => {
+    const spent = spentForCat(bg.category);
+    const left = bg.limit - spent;
+    const pct = bg.limit>0 ? Math.min(100, Math.round(spent/bg.limit*100)) : 0;
+    return '<div class="budget-cat">'
+      +'<div class="budget-cat-header">'
+      +'<div class="budget-cat-name">'+bg.name+'</div>'
+      +'<div class="budget-cat-amounts"><span>'+fmt(spent)+'</span> of '+fmt(bg.limit)+' · '+(left>=0?'<span style="color:var(--green)">'+fmt(left)+' left</span>':'<span style="color:var(--red)">'+fmt(Math.abs(left))+' over</span>')+'</div>'
+      +'</div>'
+      +progressBar(spent, bg.limit)
+      +'<div style="font-size:11px;color:var(--muted);">'+pct+'% used</div>'
+      +'<div class="budget-edit-row">'
+      +'<input type="number" id="blimit-'+bg.id+'" value="'+bg.limit+'" inputmode="decimal" placeholder="Monthly limit $"/>'
+      +'<button class="budget-edit-btn" onclick="saveBudgetLimit(''+bg.id+'')" style="background:var(--accent);color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;">Save</button>'
+      +'</div></div>';
+  }).join('');
+
+  return '<div class="budget-header">'
+    +'<div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;">'+monthName+' budget</div>'
+    +'<div style="font-family:var(--font-display);font-size:30px;letter-spacing:-0.5px;color:var(--accent2);">'+fmt(combinedAvail)+'</div>'
+    +'<div style="font-size:12px;color:var(--muted);margin-top:2px;">combined available after all fixed bills &amp; spending</div>'
+    +'</div>'
+    +'<div class="budget-available">'
+    +'<div class="budget-avail-card"><div class="budget-avail-label">Jacob available</div><div class="budget-avail-val" style="color:'+(jacobAvail>=0?'var(--green)':'var(--red)')+';">'+fmt(jacobAvail)+'</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">'+fmt(jacobIncome)+' income − '+fmt(jacobFixedTotal)+' bills − '+fmt(jacobPersonalSpent+jacobSoloFood)+' spending</div></div>'
+    +'<div class="budget-avail-card"><div class="budget-avail-label">B available</div><div class="budget-avail-val" style="color:'+(bAvail>=0?'var(--green)':'var(--red)')+';">'+fmt(bAvail)+'</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">'+fmt(bIncome)+' income − '+fmt(bFixedTotal)+' bills − '+fmt(bPersonalSpent+bSoloFood)+' spending</div></div>'
+    +'</div>'
+    +'<div class="section-label">Spending categories · '+monthName+' — tap to update limits</div>'
+    +budgetRows
+    +'<hr class="section-divider">'
+    +'<div class="section-label">💳 Debt tracker · '+fmt(totalDebt)+' total · '+fmt(totalMinPayment)+'/mo minimum</div>'
+    +'<div class="add-form" style="margin-bottom:10px;">'
+    +'<div class="form-title">Add a debt</div>'
+    +'<div class="form-field2"><label>Debt name</label><input id="debt-name" placeholder="e.g. Student loan, Car loan…"/></div>'
+    +'<div class="form-row2">'
+    +'<div class="form-field2"><label>Current balance</label><input type="number" id="debt-balance" placeholder="$0.00" inputmode="decimal"/></div>'
+    +'<div class="form-field2"><label>Min payment/mo</label><input type="number" id="debt-min" placeholder="$0.00" inputmode="decimal"/></div>'
+    +'</div>'
+    +'<button class="add-btn" onclick="addDebt()">Add Debt</button>'
+    +'</div>'
+    +'<div>'+(debts.length ? debts.map(d=>debtRow(d)).join('') : '<div class="empty-state"><div class="emoji">💳</div>No debts added yet</div>')+'</div>';
+}
+
+function renderJacob(c) {
+  const jacobFixed = getJacobFixed();
+  const homeFixed = getFixed();
+  const jacobPersonal = jacobFixed.reduce((s,b)=>s+b.amount,0);
+  const homeShare = homeFixed.reduce((s,b)=>s+b.amount,0)*0.6;
+  const jacobIncome = data.incomes.filter(i=>i.who==='jacob').reduce((s,i)=>s+(+i.amount),0);
+  const now = new Date();
+  const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][now.getMonth()] + ' ' + now.getFullYear();
+  const thisMonthExp = data.expenses.filter(e => ((e.expense_date||e.created_at||'').slice(0,7)) === thisMonth);
+  const jacobSharedHome = homeFixed.reduce((s,b)=>s+b.amount*0.6,0);
+  const jacobSharedFood = thisMonthExp.filter(e=>e.type==='food').reduce((s,e)=>s+e.amount*0.6,0);
+  const jacobSharedGroceries = thisMonthExp.filter(e=>e.type==='groceries').reduce((s,e)=>s+e.amount*0.6,0);
+  const jacobSoloFood = thisMonthExp.filter(e=>e.type==='jacob_food').reduce((s,e)=>s+e.amount,0);
+  const jacobOtherPersonal = thisMonthExp.filter(e=>e.type==='jacob').reduce((s,e)=>s+e.amount,0);
+
+  function catRow(emoji, label, amount, sub) {
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid var(--border);">'
+      +'<div><div style="font-size:13px;font-weight:500;color:var(--text);">'+emoji+' '+label+'</div>'+(sub?'<div style="font-size:11px;color:var(--muted);margin-top:1px;">'+sub+'</div>':'')+'</div>'
+      +'<div style="font-size:14px;font-weight:600;color:var(--red);">'+fmt(amount)+'</div>'
+      +'</div>';
+  }
+  function incRow(i) {
+    if(editingIncId===i.id) return '<div class="item" style="flex-wrap:wrap;gap:8px;">'
+      +'<div class="item-dot jacob"></div>'
+      +'<div class="item-left"><input id="iedit-src-'+i.id+'" value="'+i.source+'" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/></div>'
+      +'<input id="iedit-amt-'+i.id+'" type="number" value="'+i.amount+'" inputmode="decimal" style="width:90px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/>'
+      +'<button onclick="saveIncEdit(''+i.id+'')" style="background:var(--accent);border:none;border-radius:8px;padding:6px 14px;color:white;font-family:var(--font-body);font-size:12px;font-weight:600;cursor:pointer;">Save</button>'
+      +'<button onclick="cancelIncEdit()" style="background:none;border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--muted);font-family:var(--font-body);font-size:12px;cursor:pointer;">Cancel</button>'
+      +'</div>';
+    return '<div class="item"><div class="item-dot jacob"></div>'
+      +'<div class="item-left"><div class="item-name">'+i.source+'</div><div class="item-meta">Jacob · monthly</div></div>'
+      +'<div class="item-amount income">'+fmt(i.amount)+'</div>'
+      +'<button class="item-del" onclick="startIncEdit(''+i.id+'')" style="font-size:14px;">✎</button>'
+      +'<button class="item-del" onclick="delInc(''+i.id+'')">✕</button>'
+      +'</div>';
+  }
+
+  return summaryCard("Jacob's summary", jacobPersonal, homeShare, jacobIncome, jacobOtherPersonal, jacobSoloFood, jacobSharedGroceries, jacobSharedFood)
+    +'<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px;">Shared costs · your 60%</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">'+monthName+'</div>'
+    +catRow('🏠','Home bills', jacobSharedHome, 'Mortgage, utilities, etc.')
+    +catRow('🛒','Groceries', jacobSharedGroceries, 'This month so far')
+    +catRow('🍽️','Eating out (shared)', jacobSharedFood, 'This month so far')
+    +'<div style="display:flex;justify-content:space-between;padding-top:10px;">'
+    +'<div style="font-size:12px;font-weight:600;color:var(--text);">Total shared</div>'
+    +'<div style="font-size:14px;font-weight:700;color:var(--accent2);">'+fmt(jacobSharedHome+jacobSharedFood+jacobSharedGroceries)+'</div>'
+    +'</div></div>'
+    +'<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px;">Personal costs</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">'+monthName+'</div>'
+    +catRow('📋','Fixed personal bills', jacobPersonal, 'Car, loans, phone, etc.')
+    +catRow('🍔','Solo eating out', jacobSoloFood, 'This month so far')
+    +catRow('🛍️','Other personal', jacobOtherPersonal, 'This month so far')
+    +'<div style="display:flex;justify-content:space-between;padding-top:10px;">'
+    +'<div style="font-size:12px;font-weight:600;color:var(--text);">Total personal</div>'
+    +'<div style="font-size:14px;font-weight:700;color:var(--accent2);">'+fmt(jacobPersonal+jacobSoloFood+jacobOtherPersonal)+'</div>'
+    +'</div></div>'
+    +'<hr class="section-divider">'
+    +'<div class="section-label">Jacob's personal fixed bills · '+fmt(jacobPersonal)+'/mo</div>'
+    +'<div class="add-form" style="margin-bottom:10px;">'
+    +'<div class="form-title">Add a personal bill</div>'
+    +'<div class="form-field2"><label>Bill name</label><input id="jfix-name" placeholder="e.g. Gym, Subscription…"/></div>'
+    +'<div class="form-field2"><label>Monthly $</label><input type="number" id="jfix-amt" placeholder="0.00" inputmode="decimal"/></div>'
+    +'<div class="form-field2"><label>Duration</label><select id="jfix-months"><option value="0">Permanent</option><option value="1">1 month</option><option value="2">2 months</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">12 months</option><option value="24">24 months</option></select></div>'
+    +'<button class="add-btn" onclick="addJacobFixed()">Add Bill</button>'
+    +'</div>'
+    +'<div class="item-list">'+jacobFixed.map(b=>editRow(b,'jacob','saveFixedEdit')).join('')+'</div>'
+    +'<hr class="section-divider">'
+    +'<div class="section-label">Home bills — 60% share · '+fmt(homeShare)+'/mo</div>'
+    +'<div class="item-list">'+homeFixed.map(b=>editRow(b,'shared','saveFixedEdit')).join('')+'</div>'
+    +'<hr class="section-divider">'
+    +'<div class="section-label">Income</div>'
+    +'<div class="item-list">'+(data.incomes.filter(i=>i.who==='jacob').length?data.incomes.filter(i=>i.who==='jacob').map(i=>incRow(i)).join(''):'<div class="empty-state"><div class="emoji">💰</div>Add income in the Income tab</div>')+'</div>';
+}
+
+
