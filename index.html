@@ -480,8 +480,8 @@ function calc() {
   thisMonthExp.forEach(e => {
     const s=['groceries','food','shared'].includes(e.type);
     if(s){jExpOwed+=e.amount*0.6;bExpOwed+=e.amount*0.4;}
-    else if(e.type==='jacob') jExpOwed+=+e.amount;
-    else bExpOwed+=+e.amount;
+    else if(e.type==='jacob'||e.type==='jacob_food') jExpOwed+=+e.amount;
+    else if(e.type==='b'||e.type==='b_food') bExpOwed+=+e.amount;
   });
   let balance=0;
   thisMonthExp.forEach(e => {
@@ -507,7 +507,7 @@ function render() {
 }
 
 function expLabel(t) {
-  return{groceries:'Groceries',food:'Eating out',shared:'Other shared',jacob:'Jacob personal',b:'B personal',transfer:'Transfer / Venmo / Zelle'}[t]||t;
+  return{groceries:'Groceries',food:'Eating out (shared)',shared:'Other shared',jacob:'Jacob personal',jacob_food:'Jacob eating out',b:'B personal',b_food:'B eating out',transfer:'Transfer / Venmo / Zelle'}[t]||t;
 }
 
 function renderOverview(c) {
@@ -837,7 +837,7 @@ function renderExpenses(c) {
         <div class="form-field2"><label>Amount $</label><input type="number" id="exp-amt" placeholder="0.00" inputmode="decimal"/></div>
         <div class="form-field2"><label>Who paid?</label><select id="exp-paid"><option value="jacob">Jacob</option><option value="b">B</option></select></div>
       </div>
-      <div class="form-field2"><label>Category</label><select id="exp-type"><option value="groceries">Groceries (60/40)</option><option value="food">Eating out (60/40)</option><option value="shared">Other shared (60/40)</option><option value="jacob">Jacob personal</option><option value="b">B personal</option><option value="transfer">Transfer / Venmo / Zelle</option></select></div>
+      <div class="form-field2"><label>Category</label><select id="exp-type"><option value="groceries">Groceries (60/40)</option><option value="food">Eating out (60/40)</option><option value="shared">Other shared (60/40)</option><option value="jacob">Jacob personal</option><option value="jacob_food">Jacob eating out (solo)</option><option value="b">B personal</option><option value="b_food">B eating out (solo)</option><option value="transfer">Transfer / Venmo / Zelle</option></select></div>
       <div class="form-field2"><label>Date</label><input type="date" id="exp-date" style="color:var(--text);"/></div>
       <button class="add-btn" onclick="addExpense()">Add Expense</button>
     </div>` : ''}
@@ -861,15 +861,21 @@ function renderExpenses(c) {
 
 function renderIncome(c) {
   const jI=data.incomes.filter(i=>i.who==='jacob'), bI=data.incomes.filter(i=>i.who==='b');
+  const totalIncome = c.jIncome + c.bIncome;
   return `
-    <div class="add-form">
-      <div class="form-title">Add income</div>
-      <div class="form-field2"><label>Source</label><input id="inc-src" placeholder="e.g. Salary, ESPP, 401k…"/></div>
-      <div class="form-row2">
-        <div class="form-field2"><label>Monthly $</label><input type="number" id="inc-amt" placeholder="0.00" inputmode="decimal"/></div>
-        <div class="form-field2"><label>Whose?</label><select id="inc-who"><option value="jacob">Jacob</option><option value="b">B</option></select></div>
+    <div style="background:linear-gradient(145deg,#ede9f8,#e0d8f5);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px;border:1px solid var(--border2);">
+      <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Combined income</div>
+      <div style="font-family:var(--font-display);font-size:34px;color:var(--green);letter-spacing:-0.5px;margin-bottom:10px;">${fmt(totalIncome)}<span style="font-size:14px;font-weight:400;font-family:var(--font-body);color:var(--muted);"> /mo</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="background:rgba(255,255,255,0.5);border-radius:10px;padding:10px 12px;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Jacob</div>
+          <div style="font-size:18px;font-weight:600;color:var(--text);">${fmt(c.jIncome)}</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.5);border-radius:10px;padding:10px 12px;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">B</div>
+          <div style="font-size:18px;font-weight:600;color:var(--text);">${fmt(c.bIncome)}</div>
+        </div>
       </div>
-      <button class="add-btn" onclick="addIncome()">Add Income</button>
     </div>
     <div class="section-label">Jacob · ${fmt(c.jIncome)}/mo</div>
     <div class="item-list">
@@ -904,28 +910,53 @@ function editRow(b, type, saveFn) {
 
 function summaryCard(label, fixedBills, homeShare, income, spentThisMonth) {
   const totalFixedOut = fixedBills + homeShare;
-  const net = income - totalFixedOut;
-  const leftToSpend = net - (spentThisMonth || 0);
+  const leftToSpend = income - totalFixedOut - (spentThisMonth || 0);
+  const spentPct = income > 0 ? Math.min(100, Math.round(((totalFixedOut + (spentThisMonth||0)) / income) * 100)) : 0;
+  const barColor = spentPct >= 100 ? 'var(--red)' : spentPct >= 80 ? '#f59e0b' : 'var(--green)';
   return `
-    <div class="settle-box" style="text-align:left;padding:18px 20px;margin-bottom:14px;">
-      <div class="settle-label">${label}</div>
-      ${income>0?`<div style="font-size:12px;color:var(--green);font-weight:600;margin-bottom:8px;">💰 Income: ${fmt(income)}/mo</div>`:''}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-        <div style="background:var(--bg);border-radius:10px;padding:10px 12px;">
-          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Fixed bills</div>
-          <div style="font-size:16px;font-weight:600;color:var(--red);">−${fmt(totalFixedOut)}</div>
+    <div style="background:linear-gradient(145deg,#ede9f8,#e0d8f5);border-radius:var(--radius);padding:20px;margin-bottom:16px;border:1px solid var(--border2);">
+      <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;">${label}</div>
+      
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">Monthly income</div>
+          <div style="font-family:var(--font-display);font-size:26px;color:var(--green);letter-spacing:-0.5px;">${fmt(income)}</div>
         </div>
-        <div style="background:var(--bg);border-radius:10px;padding:10px 12px;">
-          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Personal spending</div>
-          <div style="font-size:16px;font-weight:600;color:var(--red);">−${fmt(spentThisMonth||0)}</div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">Used so far</div>
+          <div style="font-size:20px;font-weight:600;color:var(--red);">${fmt(totalFixedOut + (spentThisMonth||0))}</div>
         </div>
       </div>
-      ${income>0?`
-      <div style="border-top:1px solid var(--border2);padding-top:12px;">
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Left to spend this month</div>
-        <div style="font-family:var(--font-display);font-size:32px;letter-spacing:-0.5px;color:${leftToSpend>=0?'var(--green)':'var(--red)'};">${leftToSpend>=0?'':'-'}${fmt(leftToSpend)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">After fixed bills + personal spending this month</div>
-      </div>` : '<div style="font-size:12px;color:var(--muted);">Add income in the Income tab to see what you have left to spend</div>'}
+
+      <div style="background:rgba(255,255,255,0.4);border-radius:999px;height:10px;margin-bottom:10px;overflow:hidden;">
+        <div style="height:100%;border-radius:999px;background:${barColor};width:${spentPct}%;transition:width 0.4s;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:14px;">
+        <span>Bills: ${fmt(totalFixedOut)}</span>
+        <span>Spending: ${fmt(spentThisMonth||0)}</span>
+        <span>${spentPct}% used</span>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.6);border-radius:var(--radius-sm);padding:14px;text-align:center;">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Left to spend</div>
+        <div style="font-family:var(--font-display);font-size:36px;letter-spacing:-1px;color:${leftToSpend>=0?'var(--green)':'var(--red)'};">${leftToSpend<0?'-':''}${fmt(leftToSpend)}</div>
+        ${income===0?'<div style="font-size:11px;color:var(--muted);margin-top:4px;">Add income in the Income tab</div>':''}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px;">
+        <div style="background:rgba(255,255,255,0.4);border-radius:10px;padding:9px 8px;text-align:center;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.3px;">Personal bills</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);">${fmt(fixedBills)}</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.4);border-radius:10px;padding:9px 8px;text-align:center;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.3px;">Home share</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);">${fmt(homeShare)}</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.4);border-radius:10px;padding:9px 8px;text-align:center;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.3px;">Spending</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);">${fmt(spentThisMonth||0)}</div>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -938,29 +969,45 @@ function renderJacob(c) {
   const now = new Date();
   const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
   const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][now.getMonth()] + ' ' + now.getFullYear();
-  const jacobExp = data.expenses.filter(e => {
-    const d = (e.expense_date||e.created_at||'').slice(0,7);
-    return d === thisMonth && (e.type==='jacob' || ['groceries','food','shared'].includes(e.type));
-  });
-  // Personal spending = only Jacob-only expenses (shared expenses are in budget tab)
-  const jacobPersonalSpent = jacobExp.filter(e=>e.type==='jacob').reduce((s,e)=>s+e.amount, 0);
-  const jacobExpTotal = jacobExp.reduce((s,e) => {
-    const isS = ['groceries','food','shared'].includes(e.type);
-    return s + (isS ? e.amount*0.6 : e.amount);
-  }, 0);
+  const thisMonthExp = data.expenses.filter(e => ((e.expense_date||e.created_at||'').slice(0,7)) === thisMonth);
+
+  const jacobSharedHome = homeFixed.reduce((s,b)=>s+b.amount*0.6,0);
+  const jacobSharedFood = thisMonthExp.filter(e=>e.type==='food').reduce((s,e)=>s+e.amount*0.6,0);
+  const jacobSharedGroceries = thisMonthExp.filter(e=>e.type==='groceries').reduce((s,e)=>s+e.amount*0.6,0);
+  const jacobSoloFood = thisMonthExp.filter(e=>e.type==='jacob_food').reduce((s,e)=>s+e.amount,0);
+  const jacobOtherPersonal = thisMonthExp.filter(e=>e.type==='jacob').reduce((s,e)=>s+e.amount,0);
+  const jacobPersonalSpent = jacobSoloFood + jacobOtherPersonal;
+
+  function catRow(emoji, label, amount, sub) {
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid var(--border);">
+      <div><div style="font-size:13px;font-weight:500;color:var(--text);">${emoji} ${label}</div>${sub?`<div style="font-size:11px;color:var(--muted);margin-top:1px;">${sub}</div>`:''}</div>
+      <div style="font-size:14px;font-weight:600;color:var(--red);">${fmt(amount)}</div>
+    </div>`;
+  }
+
   return `
-    ${summaryCard("Jacob's summary", jacobPersonal + jacobExpTotal, homeShare, jacobIncome)}
-    <div class="section-label">This month's expenses · ${monthName} · ${fmt(jacobExpTotal)}</div>
-    <div class="item-list">
-      ${jacobExp.length ? jacobExp.slice().reverse().map(e => {
-        const isS = ['groceries','food','shared'].includes(e.type);
-        const myAmt = isS ? e.amount*0.6 : e.amount;
-        return `<div class="item">
-          <div class="item-dot ${isS?'shared':'jacob'}"></div>
-          <div class="item-left"><div class="item-name">${e.name}</div><div class="item-meta">${e.expense_date||e.created_at?.slice(0,10)||''} · ${expLabel(e.type)}</div></div>
-          <div class="item-amount">${fmt(myAmt)}</div>
-        </div>`;
-      }).join('') : '<div class="empty-state"><div class="emoji">🧾</div>No expenses this month</div>'}
+    ${summaryCard("Jacob's summary", jacobPersonal, homeShare, jacobIncome, jacobPersonalSpent)}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px;">Shared costs · your 60%</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">${monthName}</div>
+      ${catRow('🏠','Home bills', jacobSharedHome, 'Mortgage, utilities, etc.')}
+      ${catRow('🛒','Groceries', jacobSharedGroceries, 'This month so far')}
+      ${catRow('🍽️','Eating out (shared)', jacobSharedFood, 'This month so far')}
+      <div style="display:flex;justify-content:space-between;padding-top:10px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text);">Total shared</div>
+        <div style="font-size:14px;font-weight:700;color:var(--accent2);">${fmt(jacobSharedHome+jacobSharedFood+jacobSharedGroceries)}</div>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px;">Personal costs</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">${monthName}</div>
+      ${catRow('📋','Fixed personal bills', jacobPersonal, 'Car, loans, phone, etc.')}
+      ${catRow('🍔','Solo eating out', jacobSoloFood, 'This month so far')}
+      ${catRow('🛍️','Other personal', jacobOtherPersonal, 'This month so far')}
+      <div style="display:flex;justify-content:space-between;padding-top:10px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text);">Total personal</div>
+        <div style="font-size:14px;font-weight:700;color:var(--accent2);">${fmt(jacobPersonal+jacobSoloFood+jacobOtherPersonal)}</div>
+      </div>
     </div>
     <hr class="section-divider">
     <div class="section-label">Personal fixed bills · ${fmt(jacobPersonal)}/mo</div>
@@ -971,14 +1018,23 @@ function renderJacob(c) {
     <hr class="section-divider">
     <div class="section-label">Income</div>
     <div class="item-list">
-      ${data.incomes.filter(i=>i.who==='jacob').map(i=>`
+      ${data.incomes.filter(i=>i.who==='jacob').map(i=>
+        editingIncId===i.id ? `
+        <div class="item" style="flex-wrap:wrap;gap:8px;">
+          <div class="item-dot jacob"></div>
+          <div class="item-left"><input id="iedit-src-${i.id}" value="${i.source}" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/></div>
+          <input id="iedit-amt-${i.id}" type="number" value="${i.amount}" inputmode="decimal" style="width:90px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/>
+          <button onclick="saveIncEdit('${i.id}')" style="background:var(--accent);border:none;border-radius:8px;padding:6px 14px;color:white;font-family:var(--font-body);font-size:12px;font-weight:600;cursor:pointer;">Save</button>
+          <button onclick="cancelIncEdit()" style="background:none;border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--muted);font-family:var(--font-body);font-size:12px;cursor:pointer;">Cancel</button>
+        </div>` : `
         <div class="item">
           <div class="item-dot jacob"></div>
-          <div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">Monthly</div></div>
+          <div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">Jacob · monthly</div></div>
           <div class="item-amount income">${fmt(i.amount)}</div>
           <button class="item-del" onclick="startIncEdit('${i.id}')" style="font-size:14px;">✎</button>
           <button class="item-del" onclick="delInc('${i.id}')">✕</button>
-        </div>`).join('') || '<div class="empty-state"><div class="emoji">💰</div>Add income in the Income tab</div>'}
+        </div>`
+      ).join('') || '<div class="empty-state"><div class="emoji">💰</div>Add income in the Income tab</div>'}
     </div>`;
 }
 
@@ -991,17 +1047,47 @@ function renderB(c) {
   const now = new Date();
   const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
   const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][now.getMonth()] + ' ' + now.getFullYear();
-  const bExp = data.expenses.filter(e => {
-    const d = (e.expense_date||e.created_at||'').slice(0,7);
-    return d === thisMonth && (e.type==='b' || ['groceries','food','shared'].includes(e.type));
-  });
-  const bPersonalSpent = bExp.filter(e=>e.type==='b').reduce((s,e)=>s+e.amount, 0);
-  const bExpTotal = bExp.reduce((s,e) => {
-    const isS = ['groceries','food','shared'].includes(e.type);
-    return s + (isS ? e.amount*0.4 : e.amount);
-  }, 0);
+  const thisMonthExp = data.expenses.filter(e => ((e.expense_date||e.created_at||'').slice(0,7)) === thisMonth);
+
+  const bSharedHome = homeFixed.reduce((s,b)=>s+b.amount*0.4,0);
+  const bSharedFood = thisMonthExp.filter(e=>e.type==='food').reduce((s,e)=>s+e.amount*0.4,0);
+  const bSharedGroceries = thisMonthExp.filter(e=>e.type==='groceries').reduce((s,e)=>s+e.amount*0.4,0);
+  const bSoloFood = thisMonthExp.filter(e=>e.type==='b_food').reduce((s,e)=>s+e.amount,0);
+  const bOtherPersonal = thisMonthExp.filter(e=>e.type==='b').reduce((s,e)=>s+e.amount,0);
+  const bPersonalSpent = bSoloFood + bOtherPersonal;
+
+  function bCatRow(emoji, label, amount, sub) {
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid var(--border);">
+      <div><div style="font-size:13px;font-weight:500;color:var(--text);">${emoji} ${label}</div>${sub?`<div style="font-size:11px;color:var(--muted);margin-top:1px;">${sub}</div>`:''}</div>
+      <div style="font-size:14px;font-weight:600;color:var(--red);">${fmt(amount)}</div>
+    </div>`;
+  }
+
   return `
     ${summaryCard("B's summary", bPersonal, homeShare, bIncome, bPersonalSpent)}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px;">Shared costs · your 40%</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">${monthName}</div>
+      ${bCatRow('🏠','Home bills', bSharedHome, 'Mortgage, utilities, etc.')}
+      ${bCatRow('🛒','Groceries', bSharedGroceries, 'This month so far')}
+      ${bCatRow('🍽️','Eating out (shared)', bSharedFood, 'This month so far')}
+      <div style="display:flex;justify-content:space-between;padding-top:10px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text);">Total shared</div>
+        <div style="font-size:14px;font-weight:700;color:var(--accent2);">${fmt(bSharedHome+bSharedFood+bSharedGroceries)}</div>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px;">Personal costs</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">${monthName}</div>
+      ${bCatRow('📋','Fixed personal bills', bPersonal, 'Car, loans, phone, etc.')}
+      ${bCatRow('🍔','Solo eating out', bSoloFood, 'This month so far')}
+      ${bCatRow('🛍️','Other personal', bOtherPersonal, 'This month so far')}
+      <div style="display:flex;justify-content:space-between;padding-top:10px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text);">Total personal</div>
+        <div style="font-size:14px;font-weight:700;color:var(--accent2);">${fmt(bPersonal+bSoloFood+bOtherPersonal)}</div>
+      </div>
+    </div>
+    <hr class="section-divider">
     <div class="section-label">B's personal fixed bills · ${fmt(bPersonal)}/mo</div>
     <div class="add-form" style="margin-bottom:10px;">
       <div class="form-title">Add a personal bill</div>
@@ -1018,13 +1104,23 @@ function renderB(c) {
     <hr class="section-divider">
     <div class="section-label">Income</div>
     <div class="item-list">
-      ${data.incomes.filter(i=>i.who==='b').map(i=>`
+      ${data.incomes.filter(i=>i.who==='b').map(i=>
+        editingIncId===i.id ? `
+        <div class="item" style="flex-wrap:wrap;gap:8px;">
+          <div class="item-dot b"></div>
+          <div class="item-left"><input id="iedit-src-${i.id}" value="${i.source}" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/></div>
+          <input id="iedit-amt-${i.id}" type="number" value="${i.amount}" inputmode="decimal" style="width:90px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/>
+          <button onclick="saveIncEdit('${i.id}')" style="background:var(--accent);border:none;border-radius:8px;padding:6px 14px;color:white;font-family:var(--font-body);font-size:12px;font-weight:600;cursor:pointer;">Save</button>
+          <button onclick="cancelIncEdit()" style="background:none;border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--muted);font-family:var(--font-body);font-size:12px;cursor:pointer;">Cancel</button>
+        </div>` : `
         <div class="item">
           <div class="item-dot b"></div>
-          <div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">Monthly</div></div>
+          <div class="item-left"><div class="item-name">${i.source}</div><div class="item-meta">B · monthly</div></div>
           <div class="item-amount income">${fmt(i.amount)}</div>
+          <button class="item-del" onclick="startIncEdit('${i.id}')" style="font-size:14px;">✎</button>
           <button class="item-del" onclick="delInc('${i.id}')">✕</button>
-        </div>`).join('') || '<div class="empty-state"><div class="emoji">💰</div>Add income in the Income tab</div>'}
+        </div>`
+      ).join('') || '<div class="empty-state"><div class="emoji">💰</div>Add income in the Income tab</div>'}
     </div>`;
 }
 
