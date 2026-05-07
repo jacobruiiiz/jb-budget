@@ -72,6 +72,18 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .budget-edit-row input { flex: 1; background: var(--bg); border: 1px solid var(--border2); border-radius: 8px; padding: 6px 10px; color: var(--text); font-family: var(--font-body); font-size: 13px; outline: none; }
 .budget-edit-btn { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 14px; padding: 2px 6px; }
 
+/* Debt tracker */
+.debt-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 8px; }
+.debt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.debt-name { font-size: 14px; font-weight: 500; color: var(--text); }
+.debt-balance { font-size: 16px; font-weight: 600; color: var(--red); }
+.debt-meta { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+.debt-progress { margin-bottom: 6px; }
+.debt-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.debt-actions input { flex: 1; min-width: 80px; background: var(--bg); border: 1px solid var(--border2); border-radius: 8px; padding: 6px 10px; color: var(--text); font-family: var(--font-body); font-size: 12px; outline: none; }
+.debt-actions button { background: var(--accent); border: none; border-radius: 8px; padding: 6px 12px; color: white; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.debt-actions button.ghost { background: none; border: 1px solid var(--border2); color: var(--muted); }
+
 /* Scanner */
 .scan-btn { width:100%; background:var(--surface); border:1.5px dashed var(--border2); border-radius:var(--radius); padding:16px; color:var(--accent2); font-family:var(--font-body); font-size:14px; font-weight:500; cursor:pointer; margin-bottom:10px; display:flex; align-items:center; justify-content:center; gap:8px; transition:all 0.2s; }
 .scan-btn:active { background:var(--surface2); }
@@ -221,6 +233,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 const CONFIG_KEY = 'jb-supabase-config';
 const ANTHROPIC_KEY = 'jb-anthropic-key';
 const BUDGET_KEY = 'jb-budget-limits';
+const DEBT_KEY = 'jb-debts';
+function getDebts() {
+  try { return JSON.parse(localStorage.getItem(DEBT_KEY)) || []; }
+  catch { return []; }
+}
+function saveDebts(arr) { localStorage.setItem(DEBT_KEY, JSON.stringify(arr)); }
 const DEFAULT_BUDGET = [
   {id:'bg1', name:'Groceries',   category:'groceries', limit:600},
   {id:'bg2', name:'Eating out',  category:'food',      limit:300},
@@ -434,7 +452,8 @@ function showPage(page) {
   currentPage = page;
   ['overview','bills','expenses','income','jacob','b','budget'].forEach(p =>
     document.getElementById('nav-'+p).classList.toggle('active', p===page));
-  render();
+  document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  requestAnimationFrame(() => render());
 }
 
 // ── Calculations ──
@@ -488,7 +507,7 @@ function render() {
 }
 
 function expLabel(t) {
-  return{groceries:'Groceries',food:'Eating out',shared:'Other shared',jacob:'Jacob personal',b:'B personal'}[t]||t;
+  return{groceries:'Groceries',food:'Eating out',shared:'Other shared',jacob:'Jacob personal',b:'B personal',transfer:'Transfer / Venmo / Zelle'}[t]||t;
 }
 
 function renderOverview(c) {
@@ -818,7 +837,7 @@ function renderExpenses(c) {
         <div class="form-field2"><label>Amount $</label><input type="number" id="exp-amt" placeholder="0.00" inputmode="decimal"/></div>
         <div class="form-field2"><label>Who paid?</label><select id="exp-paid"><option value="jacob">Jacob</option><option value="b">B</option></select></div>
       </div>
-      <div class="form-field2"><label>Category</label><select id="exp-type"><option value="groceries">Groceries (60/40)</option><option value="food">Eating out (60/40)</option><option value="shared">Other shared (60/40)</option><option value="jacob">Jacob personal</option><option value="b">B personal</option></select></div>
+      <div class="form-field2"><label>Category</label><select id="exp-type"><option value="groceries">Groceries (60/40)</option><option value="food">Eating out (60/40)</option><option value="shared">Other shared (60/40)</option><option value="jacob">Jacob personal</option><option value="b">B personal</option><option value="transfer">Transfer / Venmo / Zelle</option></select></div>
       <div class="form-field2"><label>Date</label><input type="date" id="exp-date" style="color:var(--text);"/></div>
       <button class="add-btn" onclick="addExpense()">Add Expense</button>
     </div>` : ''}
@@ -897,7 +916,7 @@ function summaryCard(label, fixedBills, homeShare, income, spentThisMonth) {
           <div style="font-size:16px;font-weight:600;color:var(--red);">−${fmt(totalFixedOut)}</div>
         </div>
         <div style="background:var(--bg);border-radius:10px;padding:10px 12px;">
-          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Spent this month</div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Personal spending</div>
           <div style="font-size:16px;font-weight:600;color:var(--red);">−${fmt(spentThisMonth||0)}</div>
         </div>
       </div>
@@ -905,7 +924,7 @@ function summaryCard(label, fixedBills, homeShare, income, spentThisMonth) {
       <div style="border-top:1px solid var(--border2);padding-top:12px;">
         <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Left to spend this month</div>
         <div style="font-family:var(--font-display);font-size:32px;letter-spacing:-0.5px;color:${leftToSpend>=0?'var(--green)':'var(--red)'};">${leftToSpend>=0?'':'-'}${fmt(leftToSpend)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">After bills (${fmt(totalFixedOut)}) + spending (${fmt(spentThisMonth||0)})</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">After fixed bills + personal spending this month</div>
       </div>` : '<div style="font-size:12px;color:var(--muted);">Add income in the Income tab to see what you have left to spend</div>'}
     </div>`;
 }
@@ -923,6 +942,8 @@ function renderJacob(c) {
     const d = (e.expense_date||e.created_at||'').slice(0,7);
     return d === thisMonth && (e.type==='jacob' || ['groceries','food','shared'].includes(e.type));
   });
+  // Personal spending = only Jacob-only expenses (shared expenses are in budget tab)
+  const jacobPersonalSpent = jacobExp.filter(e=>e.type==='jacob').reduce((s,e)=>s+e.amount, 0);
   const jacobExpTotal = jacobExp.reduce((s,e) => {
     const isS = ['groceries','food','shared'].includes(e.type);
     return s + (isS ? e.amount*0.6 : e.amount);
@@ -968,7 +989,7 @@ function renderB(c) {
   const homeShare = homeFixed.reduce((s,b)=>s+b.amount,0)*0.4;
   const bIncome = data.incomes.filter(i=>i.who==='b').reduce((s,i)=>s+(+i.amount),0);
   return `
-    ${summaryCard("B's summary", bPersonal, homeShare, bIncome, bExpTotal)}
+    ${summaryCard("B's summary", bPersonal, homeShare, bIncome, bPersonalSpent)}
     <div class="section-label">B's personal fixed bills · ${fmt(bPersonal)}/mo</div>
     <div class="add-form" style="margin-bottom:10px;">
       <div class="form-title">Add a personal bill</div>
@@ -1046,6 +1067,28 @@ function renderBudget() {
     </div>`;
   }).join('');
 
+  // Debts
+  const debts = getDebts();
+  const totalDebt = debts.reduce((s,d)=>s+(+d.balance),0);
+  const totalMinPayment = debts.reduce((s,d)=>s+(+d.minPayment),0);
+
+  function debtRow(d) {
+    const paidPct = d.original>0 ? Math.min(100, Math.round((1 - d.balance/d.original)*100)) : 0;
+    return `<div class="debt-card">
+      <div class="debt-header">
+        <div class="debt-name">${d.name}</div>
+        <div class="debt-balance">${fmt(d.balance)}</div>
+      </div>
+      <div class="debt-meta">Min payment: ${fmt(d.minPayment)}/mo · ${paidPct}% paid off</div>
+      <div class="debt-progress">${progressBar(d.original - d.balance, d.original)}</div>
+      <div class="debt-actions">
+        <input type="number" id="dpay-${d.id}" placeholder="Payment amount $" inputmode="decimal"/>
+        <button onclick="makeDebtPayment('${d.id}')">Log Payment</button>
+        <button class="ghost" onclick="deleteDebt('${d.id}')">✕</button>
+      </div>
+    </div>`;
+  }
+
   return `
     <div class="budget-header">
       <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;">${monthName} budget</div>
@@ -1066,7 +1109,53 @@ function renderBudget() {
     </div>
     <div class="section-label">Spending categories · ${monthName} — tap to update limits</div>
     ${budgetRows}
+
+    <hr class="section-divider">
+    <div class="section-label">💳 Debt tracker · ${fmt(totalDebt)} total · ${fmt(totalMinPayment)}/mo minimum</div>
+    <div class="add-form" style="margin-bottom:10px;">
+      <div class="form-title">Add a debt</div>
+      <div class="form-field2"><label>Debt name</label><input id="debt-name" placeholder="e.g. Student loan, Car loan…"/></div>
+      <div class="form-row2">
+        <div class="form-field2"><label>Current balance</label><input type="number" id="debt-balance" placeholder="$0.00" inputmode="decimal"/></div>
+        <div class="form-field2"><label>Min payment/mo</label><input type="number" id="debt-min" placeholder="$0.00" inputmode="decimal"/></div>
+      </div>
+      <button class="add-btn" onclick="addDebt()">Add Debt</button>
+    </div>
+    <div>
+      ${debts.length ? debts.map(d=>debtRow(d)).join('') : '<div class="empty-state"><div class="emoji">💳</div>No debts added yet</div>'}
+    </div>
   `;
+}
+
+function addDebt() {
+  const name = document.getElementById('debt-name').value.trim();
+  const balance = parseFloat(document.getElementById('debt-balance').value);
+  const minPayment = parseFloat(document.getElementById('debt-min').value);
+  if(!name||isNaN(balance)||balance<=0){toast('Fill in all fields!',true);return;}
+  const debts = getDebts();
+  debts.push({id:'d'+Date.now(), name, balance, original:balance, minPayment: isNaN(minPayment)?0:minPayment});
+  saveDebts(debts);
+  toast('Debt added ✓');
+  render();
+}
+
+function makeDebtPayment(id) {
+  const el = document.getElementById('dpay-'+id);
+  const amount = parseFloat(el.value);
+  if(isNaN(amount)||amount<=0){toast('Enter a payment amount',true);return;}
+  const debts = getDebts();
+  const idx = debts.findIndex(d=>d.id===id);
+  if(idx>-1) {
+    debts[idx].balance = Math.max(0, debts[idx].balance - amount);
+    saveDebts(debts);
+    toast('Payment logged ✓');
+    render();
+  }
+}
+
+function deleteDebt(id) {
+  saveDebts(getDebts().filter(d=>d.id!==id));
+  render();
 }
 
 function saveBudgetLimit(id) {
