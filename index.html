@@ -232,6 +232,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 // ── Config (user fills these in) ──
 const CONFIG_KEY = 'jb-supabase-config';
 const ANTHROPIC_KEY = 'jb-anthropic-key';
+const JACOB_SUBS = ['Hobbies','Clothes','Shoes','Vitamins','Medical','Personal Care','Entertainment','Gifts','Travel/Gas','Dog Food','Dog Groom','Education'];
+const B_SUBS = ['Hobbies','Clothes','Shoes','Makeup','Vitamins','Medical','Personal Care','Entertainment','Gifts','Travel/Gas','Dog Food','Dog Groom','Education'];
+const SHARED_SUBS = ['Entertainment','Travel','Gifts','Home Supplies'];
+let expandedCat = null;
 const BUDGET_KEY = 'jb-budget-limits';
 const DEBT_KEY = 'jb-debts';
 function getDebts() {
@@ -355,7 +359,8 @@ function showSetup() {
 create table expenses (
   id uuid default gen_random_uuid() primary key,
   name text, amount numeric, paid text,
-  type text, expense_date date default current_date,
+  type text, subcategory text,
+  expense_date date default current_date,
   created_at timestamptz default now()
 );
 create table incomes (
@@ -518,6 +523,24 @@ function expLabel(t) {
 
 function renderOverview(c) {
   const jNet=c.jIncome-c.jOut, bNet=c.bIncome-c.bOut;
+  const now2 = new Date();
+  const thisMonth2 = now2.getFullYear() + '-' + String(now2.getMonth()+1).padStart(2,'0');
+  const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][now2.getMonth()] + ' ' + now2.getFullYear();
+  const homeFixed = getFixed();
+  const homeTotal = homeFixed.reduce((s,b)=>s+b.amount,0);
+  const thisMonthExpAll = data.expenses.filter(e=>((e.expense_date||e.created_at||'').slice(0,7))===thisMonth2);
+  const sharedFoodTotal = thisMonthExpAll.filter(e=>e.type==='food').reduce((s,e)=>s+e.amount,0);
+  const sharedGrocTotal = thisMonthExpAll.filter(e=>e.type==='groceries').reduce((s,e)=>s+e.amount,0);
+  const sharedOtherTotal = thisMonthExpAll.filter(e=>e.type==='shared').reduce((s,e)=>s+e.amount,0);
+  function sharedCatRow(emoji, label, total, jAmt, bAmt) {
+    return \`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--border);">
+      <div style="font-size:13px;font-weight:500;color:var(--text);">\${emoji} \${label}</div>
+      <div style="text-align:right;">
+        <div style="font-size:14px;font-weight:600;color:var(--text);">\${fmt(total)}</div>
+        <div style="font-size:10px;color:var(--muted);">J: \${fmt(jAmt)} · B: \${fmt(bAmt)}</div>
+      </div>
+    </div>\`;
+  }
   let sColor='color:var(--text)', sTxt='All even! 🎉', sWho="You're all squared up";
   if(Math.abs(c.balance)>=0.01) {
     if(c.balance>0){sColor='color:var(--green)';sTxt=fmt(c.balance);sWho='B owes Jacob';}
@@ -525,11 +548,19 @@ function renderOverview(c) {
   }
   const recent=data.expenses.slice(-5).reverse();
   return `
-    <div class="metrics-grid">
-      <div class="metric-card"><div class="metric-label">Jacob income</div><div class="metric-value green">${fmt(c.jIncome)}</div></div>
-      <div class="metric-card"><div class="metric-label">B income</div><div class="metric-value pink">${fmt(c.bIncome)}</div></div>
-      <div class="metric-card"><div class="metric-label">Jacob net</div><div class="metric-value ${jNet>=0?'green':'red'}">${fmtSigned(jNet)}</div></div>
-      <div class="metric-card"><div class="metric-label">B net</div><div class="metric-value ${bNet>=0?'green':'red'}">${fmtSigned(bNet)}</div></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;">Shared spending · ${monthName}</div>
+      ${sharedCatRow('🏠','Home bills', homeTotal, homeTotal*0.6, homeTotal*0.4)}
+      ${sharedCatRow('🍽️','Eating out', sharedFoodTotal, sharedFoodTotal*0.6, sharedFoodTotal*0.4)}
+      ${sharedCatRow('🛒','Groceries', sharedGrocTotal, sharedGrocTotal*0.6, sharedGrocTotal*0.4)}
+      ${sharedCatRow('📦','Other shared', sharedOtherTotal, sharedOtherTotal*0.6, sharedOtherTotal*0.4)}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;margin-top:2px;border-top:0.5px solid var(--border);">
+        <div style="font-size:12px;font-weight:700;color:var(--text);">Total shared</div>
+        <div style="text-align:right;">
+          <div style="font-size:16px;font-weight:700;color:var(--accent2);">${fmt(homeTotal+sharedFoodTotal+sharedGrocTotal+sharedOtherTotal)}</div>
+          <div style="font-size:10px;color:var(--muted);">J: ${fmt((homeTotal+sharedFoodTotal+sharedGrocTotal+sharedOtherTotal)*0.6)} · B: ${fmt((homeTotal+sharedFoodTotal+sharedGrocTotal+sharedOtherTotal)*0.4)}</div>
+        </div>
+      </div>
     </div>
     <div class="settle-box">
       <div class="settle-label">Settlement</div>
@@ -798,6 +829,23 @@ async function addScanItems(count) {
   }
 }
 
+function updateSubcats(type) {
+  const wrap = document.getElementById('exp-sub-wrap');
+  const sel = document.getElementById('exp-sub');
+  if(!wrap||!sel) return;
+  let subs = [];
+  if(type==='jacob') subs = JACOB_SUBS;
+  else if(type==='b') subs = B_SUBS;
+  else if(type==='shared') subs = SHARED_SUBS;
+  if(subs.length) {
+    sel.innerHTML = '<option value="">— select —</option>' + subs.map(s=>`<option value="${s}">${s}</option>`).join('');
+    wrap.style.display = 'block';
+  } else {
+    wrap.style.display = 'none';
+    sel.innerHTML = '';
+  }
+}
+
 function prevMonth() {
   const [y,m] = viewMonth.split('-').map(Number);
   const d = new Date(y, m-2, 1);
@@ -813,6 +861,45 @@ function nextMonth() {
   if(viewMonth > nowStr) viewMonth = nowStr;
   render();
 }
+function getSubOptions(type, current) {
+  let subs = type==='jacob'?JACOB_SUBS:type==='b'?B_SUBS:type==='shared'?SHARED_SUBS:[];
+  if(!subs.length) return '';
+  return '<option value="">— none —</option>'+subs.map(s=>`<option value="${s}" ${s===current?'selected':''}>${s}</option>`).join('');
+}
+
+function expEditRow(e) {
+  const subOpts = getSubOptions(e.type, e.subcategory);
+  return `<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:6px;">
+    <div class="form-row2" style="margin-bottom:6px;">
+      <input id="eedit-name-${e.id}" value="${e.name}" style="flex:2;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/>
+      <input id="eedit-amt-${e.id}" type="number" value="${e.amount}" style="width:80px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;"/>
+    </div>
+    <div class="form-row2" style="margin-bottom:6px;">
+      <select id="eedit-paid-${e.id}" style="flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:12px;outline:none;-webkit-appearance:none;">
+        <option value="jacob" ${e.paid==='jacob'?'selected':''}>Jacob paid</option>
+        <option value="b" ${e.paid==='b'?'selected':''}>B paid</option>
+      </select>
+      <select id="eedit-type-${e.id}" style="flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:12px;outline:none;-webkit-appearance:none;">
+        <option value="groceries" ${e.type==='groceries'?'selected':''}>Groceries</option>
+        <option value="food" ${e.type==='food'?'selected':''}>Eating out (shared)</option>
+        <option value="shared" ${e.type==='shared'?'selected':''}>Other shared</option>
+        <option value="jacob" ${e.type==='jacob'?'selected':''}>Jacob personal</option>
+        <option value="jacob_food" ${e.type==='jacob_food'?'selected':''}>Jacob solo eating</option>
+        <option value="b" ${e.type==='b'?'selected':''}>B personal</option>
+        <option value="b_food" ${e.type==='b_food'?'selected':''}>B solo eating</option>
+        <option value="transfer" ${e.type==='transfer'?'selected':''}>Transfer/Venmo/Zelle</option>
+      </select>
+    </div>
+    ${subOpts?`<select id="eedit-sub-${e.id}" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:12px;outline:none;-webkit-appearance:none;margin-bottom:6px;">${subOpts}</select>`:`<input type="hidden" id="eedit-sub-${e.id}" value=""/>`}
+    <input id="eedit-date-${e.id}" type="date" value="${e.expense_date||e.created_at?.slice(0,10)||''}" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;margin-bottom:8px;"/>
+    <div style="display:flex;gap:6px;">
+      <button onclick="saveExpEdit('${e.id}')" style="flex:1;background:var(--accent);border:none;border-radius:8px;padding:7px;color:white;font-family:var(--font-body);font-size:12px;font-weight:600;cursor:pointer;">Save</button>
+      <button onclick="cancelExpEdit()" style="background:none;border:1px solid var(--border2);border-radius:8px;padding:7px 12px;color:var(--muted);font-family:var(--font-body);font-size:12px;cursor:pointer;">Cancel</button>
+      <button onclick="delExp('${e.id}')" style="background:none;border:1px solid var(--red);border-radius:8px;padding:7px 12px;color:var(--red);font-family:var(--font-body);font-size:12px;cursor:pointer;">Delete</button>
+    </div>
+  </div>`;
+}
+
 function renderExpenses(c) {
   const now = new Date();
   const nowStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
@@ -843,7 +930,8 @@ function renderExpenses(c) {
         <div class="form-field2"><label>Amount $</label><input type="number" id="exp-amt" placeholder="0.00" inputmode="decimal"/></div>
         <div class="form-field2"><label>Who paid?</label><select id="exp-paid"><option value="jacob">Jacob</option><option value="b">B</option></select></div>
       </div>
-      <div class="form-field2"><label>Category</label><select id="exp-type"><option value="groceries">Groceries (60/40)</option><option value="food">Eating out (60/40)</option><option value="shared">Other shared (60/40)</option><option value="jacob">Jacob personal</option><option value="jacob_food">Jacob eating out (solo)</option><option value="b">B personal</option><option value="b_food">B eating out (solo)</option><option value="transfer">Transfer / Venmo / Zelle</option></select></div>
+      <div class="form-field2"><label>Category</label><select id="exp-type" onchange="updateSubcats(this.value)"><option value="groceries">Groceries (60/40)</option><option value="food">Eating out (60/40)</option><option value="shared">Other shared (60/40)</option><option value="jacob">Jacob personal</option><option value="jacob_food">Jacob eating out (solo)</option><option value="b">B personal</option><option value="b_food">B eating out (solo)</option><option value="transfer">Transfer / Venmo / Zelle</option></select></div>
+      <div class="form-field2" id="exp-sub-wrap" style="display:none;"><label>Subcategory</label><select id="exp-sub"></select></div>
       <div class="form-field2"><label>Date</label><input type="date" id="exp-date" style="color:var(--text);"/></div>
       <button class="add-btn" onclick="addExpense()">Add Expense</button>
     </div>` : ''}
@@ -855,14 +943,54 @@ function renderExpenses(c) {
       </div>
       <button onclick="nextMonth()" style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:7px 14px;color:${isCurrentMonth?'var(--muted)':'var(--text)'};font-family:var(--font-body);font-size:13px;cursor:pointer;opacity:${isCurrentMonth?'0.4':'1'};" ${isCurrentMonth?'disabled':''}>Next →</button>
     </div>
-    <div class="item-list">
-      ${filtered.length?filtered.map(e=>{
-        const isS=['groceries','food','shared'].includes(e.type);
-        const jS=isS?e.amount*0.6:(e.type==='jacob'?+e.amount:0);
-        const bS=isS?e.amount*0.4:(e.type==='b'?+e.amount:0);
-        return`<div class="item"><div class="item-dot ${isS?'shared':e.type}"></div><div class="item-left"><div class="item-name">${e.name}</div><div class="item-meta">${e.expense_date||e.created_at?.slice(0,10)||''} · ${expLabel(e.type)} · J: ${fmt(jS)} · B: ${fmt(bS)}</div></div><span class="badge ${e.paid}">${e.paid==='jacob'?'Jacob':'B'} paid</span><div class="item-amount">${fmt(e.amount)}</div>${isCurrentMonth?`<button class="item-del" onclick="delExp('${e.id}')">✕</button>`:''}</div>`;
-      }).join(''):`<div class="empty-state"><div class="emoji">💸</div>No expenses in ${monthName}</div>`}
-    </div>`;
+    ${renderExpCats(filtered, isCurrentMonth)}
+  `;
+}
+
+function renderExpCats(filtered, isCurrentMonth) {
+  if(!filtered.length) return '<div class="empty-state"><div class="emoji">💸</div>No expenses this month</div>';
+  const cats = [
+    {key:'food', label:'🍽️ Eating out (shared)', shared:true},
+    {key:'groceries', label:'🛒 Groceries (shared)', shared:true},
+    {key:'shared', label:'📦 Other shared', shared:true},
+    {key:'jacob', label:'👤 Jacob personal', shared:false},
+    {key:'jacob_food', label:'🍔 Jacob solo eating out', shared:false},
+    {key:'b', label:'👤 B personal', shared:false},
+    {key:'b_food', label:'🍔 B solo eating out', shared:false},
+    {key:'transfer', label:'💸 Transfers', shared:false},
+  ];
+  return cats.map(cat => {
+    const items = filtered.filter(e=>e.type===cat.key);
+    if(!items.length) return '';
+    const total = items.reduce((s,e)=>s+e.amount,0);
+    const isExp = expandedCat === cat.key;
+    const jAmt = cat.shared ? total*0.6 : 0;
+    const bAmt = cat.shared ? total*0.4 : 0;
+    const splitLine = cat.shared ? 'J: '+fmt(jAmt)+' · B: '+fmt(bAmt) : '';
+    const rows = isExp ? items.map(e => {
+      if(editingExpId===e.id) return expEditRow(e);
+      const sub = e.subcategory ? '<span style="font-size:10px;background:var(--surface2);border-radius:999px;padding:1px 7px;color:var(--muted);margin-left:4px;">'+e.subcategory+'</span>' : '';
+      return '<div style="padding:8px 14px;border-top:0.5px solid var(--border);display:flex;align-items:center;gap:8px;">'
+        +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.name+sub+'</div>'
+        +'<div style="font-size:11px;color:var(--muted);">'+(e.expense_date||e.created_at?.slice(0,10)||'')+' · '+(e.paid==='jacob'?'Jacob':'B')+' paid</div>'
+        +'</div>'
+        +'<div style="font-size:14px;font-weight:600;color:var(--red);white-space:nowrap;">'+fmt(e.amount)+'</div>'
+        +(isCurrentMonth ? '<button onclick="startExpEdit(''+e.id+'')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:2px 4px;">✎</button>' : '')
+        +'</div>';
+    }).join('') : '';
+    return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden;">'
+      +'<div onclick="expandedCat=expandedCat===''+cat.key+''?null:''+cat.key+'';render();" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;">'
+      +'<div><div style="font-size:13px;font-weight:600;color:var(--text);">'+cat.label+'</div>'
+      +(splitLine?'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+splitLine+'</div>':'')
+      +'</div>'
+      +'<div style="display:flex;align-items:center;gap:10px;">'
+      +'<div style="font-size:15px;font-weight:600;color:var(--red);">'+fmt(total)+'</div>'
+      +'<div style="color:var(--muted);font-size:12px;">'+(isExp?'▲':'▼')+'</div>'
+      +'</div></div>'
+      +rows
+      +'</div>';
+  }).join('');
 }
 
 function renderIncome(c) {
@@ -1179,15 +1307,22 @@ function renderBudget() {
   const totalIncome = jacobIncome + bIncome;
   const jacobFixedTotal = jacobPersonal + homeTotal*0.6;
   const bFixedTotal = bPersonal + homeTotal*0.4;
-  const jacobAvail = jacobIncome - jacobFixedTotal;
-  const bAvail = bIncome - bFixedTotal;
-  const combinedAvail = totalIncome - jacobFixedTotal - bFixedTotal;
 
   // This month's spending per category
   const now = new Date();
   const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
   const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][now.getMonth()];
   const thisMonthExp = data.expenses.filter(e => ((e.expense_date||e.created_at||'').slice(0,7)) === thisMonth);
+
+  // Match Jacob/B tab formula: income - fixed bills - personal spend - solo eating out
+  const jacobPersonalSpent = thisMonthExp.filter(e=>e.type==='jacob').reduce((s,e)=>s+e.amount,0);
+  const jacobSoloFood = thisMonthExp.filter(e=>e.type==='jacob_food').reduce((s,e)=>s+e.amount,0);
+  const bPersonalSpent = thisMonthExp.filter(e=>e.type==='b').reduce((s,e)=>s+e.amount,0);
+  const bSoloFood = thisMonthExp.filter(e=>e.type==='b_food').reduce((s,e)=>s+e.amount,0);
+
+  const jacobAvail = jacobIncome - jacobFixedTotal - jacobPersonalSpent - jacobSoloFood;
+  const bAvail = bIncome - bFixedTotal - bPersonalSpent - bSoloFood;
+  const combinedAvail = jacobAvail + bAvail;
 
   function spentForCat(cat) {
     return thisMonthExp.filter(e=>e.type===cat).reduce((s,e)=>s+e.amount,0);
@@ -1249,12 +1384,12 @@ function renderBudget() {
       <div class="budget-avail-card">
         <div class="budget-avail-label">Jacob available</div>
         <div class="budget-avail-val" style="color:${jacobAvail>=0?'var(--green)':'var(--red)'};">${fmt(jacobAvail)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px;">${fmt(jacobIncome)} income − ${fmt(jacobFixedTotal)} bills</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;">${fmt(jacobIncome)} income − ${fmt(jacobFixedTotal)} bills − ${fmt(jacobPersonalSpent+jacobSoloFood)} spending</div>
       </div>
       <div class="budget-avail-card">
         <div class="budget-avail-label">B available</div>
         <div class="budget-avail-val" style="color:${bAvail>=0?'var(--green)':'var(--red)'};">${fmt(bAvail)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px;">${fmt(bIncome)} income − ${fmt(bFixedTotal)} bills</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;">${fmt(bIncome)} income − ${fmt(bFixedTotal)} bills − ${fmt(bPersonalSpent+bSoloFood)} spending</div>
       </div>
     </div>
     <div class="section-label">Spending categories · ${monthName} — tap to update limits</div>
@@ -1363,12 +1498,29 @@ async function addExpense() {
   const paid=document.getElementById('exp-paid').value;
   const type=document.getElementById('exp-type').value;
   const expense_date=document.getElementById('exp-date').value || new Date().toISOString().split('T')[0];
+  const subEl=document.getElementById('exp-sub');
+  const subcategory=subEl?subEl.value:'';
   if(!name||isNaN(amount)||amount<=0){toast('Fill in all fields!',true);return;}
-  const {error}=await sbClient.from('expenses').insert({name,amount,paid,type,expense_date});
+  const {error}=await sbClient.from('expenses').insert({name,amount,paid,type,subcategory,expense_date});
   if(error){toast('Error saving',true);}else{toast('Expense added ✓');}
 }
 async function delExp(id) {
   await sbClient.from('expenses').delete().eq('id',id);
+}
+
+let editingExpId = null;
+function startExpEdit(id) { editingExpId=id; render(); }
+function cancelExpEdit() { editingExpId=null; render(); }
+async function saveExpEdit(id) {
+  const name=document.getElementById('eedit-name-'+id).value.trim();
+  const amount=parseFloat(document.getElementById('eedit-amt-'+id).value);
+  const paid=document.getElementById('eedit-paid-'+id).value;
+  const type=document.getElementById('eedit-type-'+id).value;
+  const subcategory=document.getElementById('eedit-sub-'+id)?document.getElementById('eedit-sub-'+id).value:'';
+  const expense_date=document.getElementById('eedit-date-'+id).value;
+  if(!name||isNaN(amount)||amount<=0){toast('Fill in all fields!',true);return;}
+  const {error}=await sbClient.from('expenses').update({name,amount,paid,type,subcategory,expense_date}).eq('id',id);
+  if(error){toast('Error saving',true);}else{editingExpId=null;toast('Expense updated ✓');}
 }
 
 function addJacobFixed() {
